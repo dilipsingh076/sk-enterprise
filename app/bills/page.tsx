@@ -1,9 +1,10 @@
 import { BillsListClient } from "@/components/bills/BillsListClient";
+import { Box } from "@/components/ui";
 
 export default function BillsPage() {
   return (
-    <div className="min-h-screen bg-zinc-50 py-6 px-3 sm:py-8 sm:px-4">
+    <Box className="mx-auto w-full px-3 py-6 sm:px-4 sm:py-8">
       <BillsListClient />
-    </div>
+    </Box>
   );
 }

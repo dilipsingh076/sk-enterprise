@@ -1,22 +1,35 @@
 "use client";
 
+import { ChevronRight, FileText, Landmark, ScrollText } from "lucide-react";
+import { memo, useState } from "react";
 import { useFormContext, type Path } from "react-hook-form";
 import { FormSection } from "@/components/invoice/FormSection";
+import {
+  Details,
+  Field,
+  Grid,
+  Input,
+  Kbd,
+  Label,
+  Stack,
+  Summary,
+  Text,
+  TextArea,
+} from "@/components/ui";
 import type { UserProfile } from "@/lib/invoice/userProfile";
-
-function labelClass() {
-  return "block text-xs font-medium text-zinc-600";
-}
-
-function inputClass() {
-  return "mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400";
-}
 
 function cp(index: 0 | 1, key: string): Path<UserProfile> {
   return `companies.${index}.${key}` as Path<UserProfile>;
 }
 
-export function CompanyPresetEditor({
+const detailsShell =
+  "group mt-2 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50/50 open:bg-white open:shadow-sm";
+
+const detailsSummaryClass =
+  "flex cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-zinc-800 " +
+  "[&::-webkit-details-marker]:hidden hover:bg-zinc-100/80 open:rounded-b-none open:border-b open:border-zinc-100 open:bg-white";
+
+function CompanyPresetEditorInner({
   index,
   title,
 }: {
@@ -29,166 +42,248 @@ export function CompanyPresetEditor({
   } = useFormContext<UserProfile>();
   const e0 = errors.companies?.[index];
 
+  const [openInvoice, setOpenInvoice] = useState(true);
+  const [openLegal, setOpenLegal] = useState(true);
+  const [openContact, setOpenContact] = useState(true);
+  const [openBank, setOpenBank] = useState(false);
+  const [openFooter, setOpenFooter] = useState(false);
+
   return (
-    <FormSection id={`profile-company-${index}`} title={title}>
-      <input type="hidden" {...register(cp(index, "id"))} />
-      <p className="mb-3 text-xs text-zinc-600">
-        Menu name appears on the invoice page when choosing which company is issuing this bill.
-      </p>
-      <div className="mb-4">
-        <label className={labelClass()}>Menu name</label>
-        <input {...register(cp(index, "label"))} className={inputClass()} />
-        {e0?.label && <p className="mt-1 text-xs text-red-600">{e0.label.message}</p>}
-      </div>
+    <FormSection
+      id={`profile-company-${index}`}
+      title={title}
+      dense
+      leading={<FileText className="text-zinc-600" aria-hidden />}
+    >
+      <Input type="hidden" {...register(cp(index, "id"))} />
 
-      <div className="mb-4">
-        <label className={labelClass()}>PDF header description</label>
-        <input
-          {...register(cp(index, "seller.pdfHeaderDescription"))}
-          className={inputClass()}
-          placeholder="e.g. Engineering, Infrastructure & Construction Works"
-        />
-        <p className="mt-1 text-[11px] text-zinc-500">
-          Shown under the legal name on the downloaded invoice PDF. Leave blank to hide.
-        </p>
-      </div>
+      <Details
+        className={`${detailsShell} mb-2`}
+        open={openInvoice}
+        onToggle={(e) => setOpenInvoice((e.target as HTMLDetailsElement).open)}
+      >
+        <Summary className={detailsSummaryClass}>
+          <ChevronRight
+            className="h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200 group-open:rotate-90"
+            aria-hidden
+          />
+          Invoice menu &amp; PDF header
+        </Summary>
+        <Stack gap="sm" className="border-t border-zinc-100 bg-white px-2 py-3">
+          <Text className="text-[11px] leading-snug text-zinc-600">
+            Shown on the invoice page and under your legal name on the PDF.
+          </Text>
+          <Field>
+            <Label>Menu name</Label>
+            <Input {...register(cp(index, "label"))} />
+            {e0?.label ? <Text className="mt-1 text-xs text-red-600">{e0.label.message}</Text> : null}
+          </Field>
+          <Field>
+            <Label>Invoice number prefix</Label>
+            <Input {...register(cp(index, "invoiceNumberPrefix"))} placeholder="e.g. UK" maxLength={12} />
+            <Text className="mt-1 text-[11px] text-zinc-500">
+              New invoice numbers start as <Kbd className="rounded bg-zinc-200 px-1 py-0.5 font-mono text-[10px]">PREFIX-</Kbd> on the
+              invoice page when this company is selected.
+            </Text>
+            {e0?.invoiceNumberPrefix ? (
+              <Text className="mt-1 text-xs text-red-600">{String(e0.invoiceNumberPrefix.message)}</Text>
+            ) : null}
+          </Field>
+          <Field>
+            <Label>PDF header description</Label>
+            <Input
+              {...register(cp(index, "seller.pdfHeaderDescription"))}
+              placeholder="e.g. Engineering, Infrastructure & Construction Works"
+            />
+            <Text className="mt-1 text-[11px] text-zinc-500">Leave blank to hide on the PDF.</Text>
+          </Field>
+        </Stack>
+      </Details>
 
-      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-700">
-        Legal &amp; registration
-      </h3>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <label className={labelClass()}>Legal name</label>
-          <input {...register(cp(index, "seller.name"))} className={inputClass()} />
-          {e0?.seller?.name && (
-            <p className="mt-1 text-xs text-red-600">{e0.seller.name.message}</p>
-          )}
-        </div>
-        <div className="sm:col-span-2">
-          <label className={labelClass()}>Address</label>
-          <textarea rows={3} {...register(cp(index, "seller.address"))} className={inputClass()} />
-          {e0?.seller?.address && (
-            <p className="mt-1 text-xs text-red-600">{e0.seller.address.message}</p>
-          )}
-        </div>
-        <div>
-          <label className={labelClass()}>GSTIN</label>
-          <input {...register(cp(index, "seller.gstin"))} className={inputClass()} maxLength={15} />
-          {e0?.seller?.gstin && (
-            <p className="mt-1 text-xs text-red-600">{e0.seller.gstin.message}</p>
-          )}
-        </div>
-        <div>
-          <label className={labelClass()}>PAN</label>
-          <input {...register(cp(index, "seller.pan"))} className={inputClass()} maxLength={10} />
-        </div>
-        <div>
-          <label className={labelClass()}>State</label>
-          <input {...register(cp(index, "seller.stateName"))} className={inputClass()} />
-        </div>
-        <div>
-          <label className={labelClass()}>State code</label>
-          <input {...register(cp(index, "seller.stateCode"))} className={inputClass()} maxLength={2} />
-          {e0?.seller?.stateCode && (
-            <p className="mt-1 text-xs text-red-600">{e0.seller.stateCode.message}</p>
-          )}
-        </div>
-        <div>
-          <label className={labelClass()}>Phone</label>
-          <input {...register(cp(index, "seller.phone"))} className={inputClass()} />
-          {e0?.seller?.phone && (
-            <p className="mt-1 text-xs text-red-600">{e0.seller.phone.message}</p>
-          )}
-        </div>
-        <div>
-          <label className={labelClass()}>Email</label>
-          <input type="email" {...register(cp(index, "seller.email"))} className={inputClass()} />
-          {e0?.seller?.email && (
-            <p className="mt-1 text-xs text-red-600">{e0.seller.email.message}</p>
-          )}
-        </div>
-        <div>
-          <label className={labelClass()}>Mobile (optional)</label>
-          <input {...register(cp(index, "seller.mobile"))} className={inputClass()} />
-        </div>
-        <div className="sm:col-span-2">
-          <label className={labelClass()}>Kind attention (optional)</label>
-          <input {...register(cp(index, "seller.kindAttn"))} className={inputClass()} />
-        </div>
-      </div>
+      <Details
+        className={`${detailsShell} mb-2`}
+        open={openLegal}
+        onToggle={(e) => setOpenLegal((e.target as HTMLDetailsElement).open)}
+      >
+        <Summary className={detailsSummaryClass}>
+          <ChevronRight
+            className="h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200 group-open:rotate-90"
+            aria-hidden
+          />
+          Legal name, GSTIN &amp; address
+        </Summary>
+        <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm" className="border-t border-zinc-100 bg-white px-2 py-3">
+          <Field className="sm:col-span-2">
+            <Label>Legal name</Label>
+            <Input {...register(cp(index, "seller.name"))} />
+            {e0?.seller?.name ? (
+              <Text className="mt-1 text-xs text-red-600">{e0.seller.name.message}</Text>
+            ) : null}
+          </Field>
+          <Field className="sm:col-span-2">
+            <Label>Address</Label>
+            <TextArea rows={2} {...register(cp(index, "seller.address"))} />
+            {e0?.seller?.address ? (
+              <Text className="mt-1 text-xs text-red-600">{e0.seller.address.message}</Text>
+            ) : null}
+          </Field>
+          <Field>
+            <Label>GSTIN</Label>
+            <Input {...register(cp(index, "seller.gstin"))} maxLength={15} />
+            {e0?.seller?.gstin ? (
+              <Text className="mt-1 text-xs text-red-600">{e0.seller.gstin.message}</Text>
+            ) : null}
+          </Field>
+          <Field>
+            <Label>PAN</Label>
+            <Input {...register(cp(index, "seller.pan"))} maxLength={10} />
+          </Field>
+          <Field>
+            <Label>State</Label>
+            <Input {...register(cp(index, "seller.stateName"))} />
+          </Field>
+          <Field>
+            <Label>State code</Label>
+            <Input {...register(cp(index, "seller.stateCode"))} maxLength={2} />
+            {e0?.seller?.stateCode ? (
+              <Text className="mt-1 text-xs text-red-600">{e0.seller.stateCode.message}</Text>
+            ) : null}
+          </Field>
+        </Grid>
+      </Details>
 
-      <h3 className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wide text-zinc-700">
-        Bank (PDF)
-      </h3>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label className={labelClass()}>Bank</label>
-          <input {...register(cp(index, "seller.bankName"))} className={inputClass()} />
-          {e0?.seller?.bankName && (
-            <p className="mt-1 text-xs text-red-600">{e0.seller.bankName.message}</p>
-          )}
-        </div>
-        <div>
-          <label className={labelClass()}>Account no.</label>
-          <input {...register(cp(index, "seller.accountNo"))} className={inputClass()} />
-          {e0?.seller?.accountNo && (
-            <p className="mt-1 text-xs text-red-600">{e0.seller.accountNo.message}</p>
-          )}
-        </div>
-        <div>
-          <label className={labelClass()}>IFSC</label>
-          <input {...register(cp(index, "seller.ifsc"))} className={inputClass()} maxLength={11} />
-          {e0?.seller?.ifsc && (
-            <p className="mt-1 text-xs text-red-600">{e0.seller.ifsc.message}</p>
-          )}
-        </div>
-        <div>
-          <label className={labelClass()}>Branch (optional)</label>
-          <input {...register(cp(index, "seller.branch"))} className={inputClass()} />
-        </div>
-      </div>
+      <Details
+        className={`${detailsShell} mb-2`}
+        open={openContact}
+        onToggle={(e) => setOpenContact((e.target as HTMLDetailsElement).open)}
+      >
+        <Summary className={detailsSummaryClass}>
+          <ChevronRight
+            className="h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200 group-open:rotate-90"
+            aria-hidden
+          />
+          Contact
+        </Summary>
+        <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm" className="border-t border-zinc-100 bg-white px-2 py-3">
+          <Field>
+            <Label>Phone</Label>
+            <Input {...register(cp(index, "seller.phone"))} />
+            {e0?.seller?.phone ? (
+              <Text className="mt-1 text-xs text-red-600">{e0.seller.phone.message}</Text>
+            ) : null}
+          </Field>
+          <Field>
+            <Label>Email</Label>
+            <Input type="email" {...register(cp(index, "seller.email"))} />
+            {e0?.seller?.email ? (
+              <Text className="mt-1 text-xs text-red-600">{e0.seller.email.message}</Text>
+            ) : null}
+          </Field>
+          <Field>
+            <Label>Mobile (optional)</Label>
+            <Input {...register(cp(index, "seller.mobile"))} />
+          </Field>
+          <Field className="sm:col-span-2">
+            <Label>Kind attention (optional)</Label>
+            <Input {...register(cp(index, "seller.kindAttn"))} />
+          </Field>
+        </Grid>
+      </Details>
 
-      <h3 className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wide text-zinc-700">
-        PDF footer &amp; legal (optional)
-      </h3>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <label className={labelClass()}>Regd. office &amp; works</label>
-          <textarea rows={2} {...register(cp(index, "seller.regdOffice"))} className={inputClass()} />
-        </div>
-        <div className="sm:col-span-2">
-          <label className={labelClass()}>Other office / branch line</label>
-          <input {...register(cp(index, "seller.branchOfficeDetails"))} className={inputClass()} />
-        </div>
-        <div>
-          <label className={labelClass()}>CIN</label>
-          <input {...register(cp(index, "seller.cin"))} className={inputClass()} />
-        </div>
-        <div>
-          <label className={labelClass()}>TAN</label>
-          <input {...register(cp(index, "seller.tan"))} className={inputClass()} />
-        </div>
-        <div className="sm:col-span-2">
-          <label className={labelClass()}>Certifications (ISO line)</label>
-          <input {...register(cp(index, "seller.certificationsLine"))} className={inputClass()} />
-        </div>
-        <div className="sm:col-span-2">
-          <label className={labelClass()}>Jurisdiction</label>
-          <input {...register(cp(index, "seller.jurisdiction"))} className={inputClass()} />
-        </div>
-        <div className="sm:col-span-2">
-          <label className={labelClass()}>Declaration (optional)</label>
-          <textarea rows={2} {...register(cp(index, "seller.declaration"))} className={inputClass()} />
-        </div>
-        <div className="sm:col-span-2">
-          <label className={labelClass()}>Certification line</label>
-          <input {...register(cp(index, "seller.certificationLine"))} className={inputClass()} />
-        </div>
-        <div className="sm:col-span-2">
-          <label className={labelClass()}>Terms &amp; conditions (numbered)</label>
-          <textarea rows={4} {...register(cp(index, "seller.termsAndConditions"))} className={inputClass()} />
-        </div>
-      </div>
+      <Details
+        className={detailsShell}
+        open={openBank}
+        onToggle={(e) => setOpenBank((e.target as HTMLDetailsElement).open)}
+      >
+        <Summary className={detailsSummaryClass}>
+          <ChevronRight
+            className="h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200 group-open:rotate-90"
+            aria-hidden
+          />
+          <Landmark className="h-3.5 w-3.5 text-zinc-500" aria-hidden />
+          Bank on PDF
+        </Summary>
+        <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm" className="border-t border-zinc-100 bg-white px-2 py-3">
+          <Field>
+            <Label>Bank</Label>
+            <Input {...register(cp(index, "seller.bankName"))} />
+            {e0?.seller?.bankName ? (
+              <Text className="mt-1 text-xs text-red-600">{e0.seller.bankName.message}</Text>
+            ) : null}
+          </Field>
+          <Field>
+            <Label>Account no.</Label>
+            <Input {...register(cp(index, "seller.accountNo"))} />
+            {e0?.seller?.accountNo ? (
+              <Text className="mt-1 text-xs text-red-600">{e0.seller.accountNo.message}</Text>
+            ) : null}
+          </Field>
+          <Field>
+            <Label>IFSC</Label>
+            <Input {...register(cp(index, "seller.ifsc"))} maxLength={11} />
+            {e0?.seller?.ifsc ? <Text className="mt-1 text-xs text-red-600">{e0.seller.ifsc.message}</Text> : null}
+          </Field>
+          <Field>
+            <Label>Branch (optional)</Label>
+            <Input {...register(cp(index, "seller.branch"))} />
+          </Field>
+        </Grid>
+      </Details>
+
+      <Details
+        className={`${detailsShell} mt-2`}
+        open={openFooter}
+        onToggle={(e) => setOpenFooter((e.target as HTMLDetailsElement).open)}
+      >
+        <Summary className={detailsSummaryClass}>
+          <ChevronRight
+            className="h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200 group-open:rotate-90"
+            aria-hidden
+          />
+          <ScrollText className="h-3.5 w-3.5 text-zinc-500" aria-hidden />
+          PDF footer &amp; legal (optional)
+        </Summary>
+        <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm" className="border-t border-zinc-100 bg-white px-2 py-3">
+          <Field className="sm:col-span-2">
+            <Label>Regd. office &amp; works</Label>
+            <TextArea rows={2} {...register(cp(index, "seller.regdOffice"))} />
+          </Field>
+          <Field className="sm:col-span-2">
+            <Label>Other office / branch line</Label>
+            <Input {...register(cp(index, "seller.branchOfficeDetails"))} />
+          </Field>
+          <Field>
+            <Label>CIN</Label>
+            <Input {...register(cp(index, "seller.cin"))} />
+          </Field>
+          <Field>
+            <Label>TAN</Label>
+            <Input {...register(cp(index, "seller.tan"))} />
+          </Field>
+          <Field className="sm:col-span-2">
+            <Label>Certifications (ISO line)</Label>
+            <Input {...register(cp(index, "seller.certificationsLine"))} />
+          </Field>
+          <Field className="sm:col-span-2">
+            <Label>Jurisdiction</Label>
+            <Input {...register(cp(index, "seller.jurisdiction"))} />
+          </Field>
+          <Field className="sm:col-span-2">
+            <Label>Declaration (optional)</Label>
+            <TextArea rows={2} {...register(cp(index, "seller.declaration"))} />
+          </Field>
+          <Field className="sm:col-span-2">
+            <Label>Certification line</Label>
+            <Input {...register(cp(index, "seller.certificationLine"))} />
+          </Field>
+          <Field className="sm:col-span-2">
+            <Label>Terms &amp; conditions (numbered)</Label>
+            <TextArea rows={3} {...register(cp(index, "seller.termsAndConditions"))} />
+          </Field>
+        </Grid>
+      </Details>
     </FormSection>
   );
 }
+
+export const CompanyPresetEditor = memo(CompanyPresetEditorInner);

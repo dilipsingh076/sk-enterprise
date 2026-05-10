@@ -134,22 +134,36 @@ const styles = StyleSheet.create({
 
   metaCol: { flex: 1, flexDirection: "column" },
   metaSplit: { flexDirection: "row" },
-  metaPair: { flexDirection: "row", borderBottomWidth: 1, borderColor: GRID },
-  metaPairLast: { flexDirection: "row" },
+  metaPair: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    borderBottomWidth: 1,
+    borderColor: GRID,
+  },
+  metaPairLast: { flexDirection: "row", alignItems: "stretch" },
   metaLabelCell: {
-    width: "45%",
+    width: "38%",
+    flexShrink: 0,
     paddingVertical: 2,
     paddingHorizontal: 4,
+    justifyContent: "center",
+  },
+  metaLabelText: {
     fontSize: 7.5,
   },
   metaValueCell: {
-    width: "55%",
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
     paddingVertical: 2,
     paddingHorizontal: 4,
-    fontSize: 7.5,
-    fontFamily: "Helvetica-Bold",
     borderLeftWidth: 1,
     borderColor: GRID,
+  },
+  metaValueText: {
+    fontSize: 7.5,
+    fontFamily: "Helvetica-Bold",
   },
   vsplit: { borderLeftWidth: 1, borderColor: GRID },
 
@@ -411,8 +425,12 @@ function MetaPair({
 }) {
   return (
     <View style={last ? styles.metaPairLast : styles.metaPair}>
-      <Text style={styles.metaLabelCell}>{label}</Text>
-      <Text style={styles.metaValueCell}>{value || "—"}</Text>
+      <View style={styles.metaLabelCell}>
+        <Text style={styles.metaLabelText}>{label}</Text>
+      </View>
+      <View style={styles.metaValueCell}>
+        <Text style={styles.metaValueText}>{value || "—"}</Text>
+      </View>
     </View>
   );
 }

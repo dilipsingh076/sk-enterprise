@@ -77,11 +77,13 @@ const DEFAULT_COMPANIES: [CompanyPreset, CompanyPreset] = [
   {
     id: "company-utk",
     label: "SK Enterprises(UK)",
+    invoiceNumberPrefix: "UK",
     seller: SK_SELLER,
   },
   {
     id: "company-mh",
     label: "PUTZMEISTER INDIA PRIVATE LIMITED",
+    invoiceNumberPrefix: "MH",
     seller: SECOND_SELLER,
   },
 ];
@@ -92,6 +94,7 @@ const DEFAULT_COMPANIES: [CompanyPreset, CompanyPreset] = [
 export const DEFAULT_USER_PROFILE: UserProfile = {
   companies: DEFAULT_COMPANIES,
   defaultCompanyId: "company-utk",
+  recentBillTo: [],
   invoiceTaxDefaults: {
     placeOfSupplyState: "Uttarakhand",
     placeOfSupplyCode: "05",
@@ -113,15 +116,18 @@ function migrateLegacyProfile(raw: unknown): UserProfile | null {
       {
         id: "company-utk",
         label,
+        invoiceNumberPrefix: "UK",
         seller: leg.data.seller,
       },
       {
         id: "company-mh",
         label: DEFAULT_COMPANIES[1].label,
+        invoiceNumberPrefix: "MH",
         seller: DEFAULT_COMPANIES[1].seller,
       },
     ],
     defaultCompanyId: "company-utk",
+    recentBillTo: [],
     invoiceTaxDefaults: leg.data.invoiceTaxDefaults,
   };
 }
@@ -139,19 +145,58 @@ function tryCoerceSingleCompanyArray(raw: unknown): UserProfile | null {
   return {
     companies: [only, DEFAULT_COMPANIES[1]],
     defaultCompanyId: row.data.defaultCompanyId || only.id,
+    recentBillTo: [],
     invoiceTaxDefaults: row.data.invoiceTaxDefaults,
+  };
+}
+
+function inferInvoicePrefix(company: { id: string; label: string }): string {
+  if (company.id === "company-utk") return "UK";
+  if (company.id === "company-mh") return "MH";
+  const paren = company.label.match(/\(([A-Za-z0-9]{2,6})\)\s*$/);
+  if (paren?.[1]) return paren[1].toUpperCase();
+  const slug = company.id.replace(/^company-/, "").toUpperCase();
+  return slug.slice(0, 6) || "INV";
+}
+
+/** Normalized prefix for invoice numbers (uppercase). */
+export function getInvoiceNumberPrefix(company: CompanyPreset): string {
+  const raw = company.invoiceNumberPrefix?.trim();
+  if (raw) return raw.toUpperCase();
+  return inferInvoicePrefix(company);
+}
+
+export function getInvoiceNumberPrefixForCompanyId(profile: UserProfile, companyId: string): string {
+  const hit = profile.companies.find((c) => c.id === companyId);
+  return hit ? getInvoiceNumberPrefix(hit) : "INV";
+}
+
+/** Fill `recentBillTo`, `invoiceNumberPrefix`, and other defaults for older stored JSON. */
+export function ensureUserProfileDefaults(profile: UserProfile): UserProfile {
+  return {
+    ...profile,
+    recentBillTo: profile.recentBillTo ?? [],
+    companies: profile.companies.map((c) => ({
+      ...c,
+      invoiceNumberPrefix: getInvoiceNumberPrefix(c),
+    })) as UserProfile["companies"],
   };
 }
 
 /** Normalize raw JSON from disk (any legacy shape) into `UserProfile`. */
 export function normalizeStoredUserProfile(raw: unknown): UserProfile {
+  let base: UserProfile;
   const v2 = userProfileSchema.safeParse(raw);
-  if (v2.success) return v2.data;
-  const coerced = tryCoerceSingleCompanyArray(raw);
-  if (coerced) return coerced;
-  const migrated = migrateLegacyProfile(raw);
-  if (migrated) return migrated;
-  return DEFAULT_USER_PROFILE;
+  if (v2.success) base = v2.data;
+  else {
+    const coerced = tryCoerceSingleCompanyArray(raw);
+    if (coerced) base = coerced;
+    else {
+      const migrated = migrateLegacyProfile(raw);
+      base = migrated ?? DEFAULT_USER_PROFILE;
+    }
+  }
+  return ensureUserProfileDefaults(base);
 }
 
 export function getSellerForCompanyId(profile: UserProfile, companyId: string): Seller {
@@ -186,4 +231,102 @@ export function resolveActiveCompanyId(
     return activeFromBundle;
   }
   return profile.defaultCompanyId;
+}
+
+function escapeReg(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Forces the invoice number to use the selected company’s prefix (Profile → invoice prefix).
+ * Strips any known company prefix from the value, then prepends the correct one so bare
+ * suffixes like `2025-001` become `UK-2025-001` when that company is active.
+ */
+export function ensureInvoiceNumberForCompanyId(
+  invoiceNumber: string,
+  profile: UserProfile,
+  companyId: string,
+): string {
+  const p = ensureUserProfileDefaults(profile);
+  const prefix = getInvoiceNumberPrefixForCompanyId(p, companyId);
+  let cur = invoiceNumber.trim();
+  if (!cur) return `${prefix}-`;
+
+  if (new RegExp(`^${escapeReg(prefix)}-`, "i").test(cur)) {
+    return cur.replace(new RegExp(`^${escapeReg(prefix)}-`, "i"), `${prefix}-`);
+  }
+
+  for (const c of p.companies) {
+    const pref = getInvoiceNumberPrefix(c);
+    if (new RegExp(`^${escapeReg(pref)}-`, "i").test(cur)) {
+      cur = cur.replace(new RegExp(`^${escapeReg(pref)}-`, "i"), "");
+      break;
+    }
+  }
+  cur = cur.replace(/^-+/, "");
+  return `${prefix}-${cur}`;
+}
+
+/**
+ * Splits the stored invoice number into the **active** company’s prefix (for read-only UI)
+ * and the editable suffix. If the stored value used another company’s prefix, that segment
+ * is stripped so the suffix still makes sense after switching issuer.
+ */
+export function splitInvoiceNumberTail(
+  full: string,
+  profile: UserProfile,
+  companyId: string,
+): { prefix: string; suffix: string } {
+  const p = ensureUserProfileDefaults(profile);
+  const activePrefix = getInvoiceNumberPrefixForCompanyId(p, companyId);
+  let rest = full.trim();
+
+  if (new RegExp(`^${escapeReg(activePrefix)}-`, "i").test(rest)) {
+    rest = rest.replace(new RegExp(`^${escapeReg(activePrefix)}-`, "i"), "");
+  } else {
+    for (const c of p.companies) {
+      const pref = getInvoiceNumberPrefix(c);
+      if (new RegExp(`^${escapeReg(pref)}-`, "i").test(rest)) {
+        rest = rest.replace(new RegExp(`^${escapeReg(pref)}-`, "i"), "");
+        break;
+      }
+    }
+  }
+  rest = rest.replace(/^-+/, "");
+  return { prefix: activePrefix, suffix: rest };
+}
+
+/** Inverse of {@link splitInvoiceNumberTail} for the suffix field only. */
+export function joinInvoiceNumberTail(prefix: string, suffix: string): string {
+  const s = suffix.trim();
+  return `${prefix}-${s}`;
+}
+
+/**
+ * When switching issuer, re-apply the new company’s prefix (same rules as
+ * {@link ensureInvoiceNumberForCompanyId}).
+ */
+export function alignInvoiceNumberPrefix(
+  invoiceNumber: string,
+  profile: UserProfile,
+  _previousCompanyId: string | null | undefined,
+  newCompanyId: string,
+): string {
+  return ensureInvoiceNumberForCompanyId(invoiceNumber, profile, newCompanyId);
+}
+
+/**
+ * Ensures the invoice number includes the profile prefix for the company that matches
+ * the invoice seller GSTIN (so PDF preview/download stay aligned with Profile prefixes).
+ */
+export function ensureInvoiceNumberForSeller(
+  invoiceNumber: string,
+  profile: UserProfile,
+  sellerGstin: string,
+): string {
+  const p = ensureUserProfileDefaults(profile);
+  const g = sellerGstin.trim().toUpperCase();
+  const company = p.companies.find((c) => c.seller.gstin.trim().toUpperCase() === g);
+  const cid = company?.id ?? p.defaultCompanyId;
+  return ensureInvoiceNumberForCompanyId(invoiceNumber, profile, cid);
 }

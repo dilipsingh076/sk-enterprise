@@ -3,15 +3,19 @@ import path from "path";
 import { list, put } from "@vercel/blob";
 import { z } from "zod";
 import { invoiceSchema } from "@/lib/invoice/schema";
-import { userProfileSchema, type UserProfile } from "@/lib/invoice/userProfile";
-import { DEFAULT_USER_PROFILE, normalizeStoredUserProfile } from "@/lib/profile/profileStorage";
+import { userProfileSchema } from "@/lib/invoice/userProfile";
+import {
+  DEFAULT_USER_PROFILE,
+  ensureUserProfileDefaults,
+  normalizeStoredUserProfile,
+} from "@/lib/profile/profileStorage";
 
 const BLOB_PREFIX = "e-bill-data";
 const FILE_PROFILE = "profile.json";
 const FILE_DRAFT = "draft.json";
 const FILE_BILLS = "bills.json";
 
-function useBlob(): boolean {
+function shouldUseBlob(): boolean {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 }
 
@@ -71,12 +75,12 @@ async function writeJsonFs(name: string, data: unknown): Promise<void> {
 }
 
 async function readJson(name: string): Promise<unknown | null> {
-  if (useBlob()) return readJsonBlob(name);
+  if (shouldUseBlob()) return readJsonBlob(name);
   return readJsonFs(name);
 }
 
 async function writeJson(name: string, data: unknown): Promise<void> {
-  if (useBlob()) await writeJsonBlob(name, data);
+  if (shouldUseBlob()) await writeJsonBlob(name, data);
   else await writeJsonFs(name, data);
 }
 
@@ -107,10 +111,11 @@ const billsFileSchema = z.object({
 export type BillsFile = z.infer<typeof billsFileSchema>;
 
 export function defaultProfileBundle(): ProfileBundle {
+  const userProfile = ensureUserProfileDefaults(DEFAULT_USER_PROFILE);
   return {
     version: 1,
-    userProfile: DEFAULT_USER_PROFILE,
-    activeCompanyId: DEFAULT_USER_PROFILE.defaultCompanyId,
+    userProfile,
+    activeCompanyId: userProfile.defaultCompanyId,
   };
 }
 
@@ -118,11 +123,16 @@ export async function readProfileBundle(): Promise<ProfileBundle> {
   const raw = await readJson(FILE_PROFILE);
   if (raw == null) return defaultProfileBundle();
   const parsed = profileBundleSchema.safeParse(raw);
-  if (parsed.success) return parsed.data;
+  if (parsed.success) {
+    return {
+      ...parsed.data,
+      userProfile: ensureUserProfileDefaults(parsed.data.userProfile),
+    };
+  }
   const userProfile = normalizeStoredUserProfile(raw);
   return {
     version: 1,
-    userProfile,
+    userProfile: ensureUserProfileDefaults(userProfile),
     activeCompanyId: userProfile.defaultCompanyId,
   };
 }

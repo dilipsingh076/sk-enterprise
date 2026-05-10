@@ -1,6 +1,8 @@
 import type { InvoiceFormInput } from "@/lib/invoice/schema";
 import type { UserProfile } from "@/lib/invoice/userProfile";
 import {
+  ensureInvoiceNumberForCompanyId,
+  ensureUserProfileDefaults,
   getSellerAlignedTaxDefaults,
   getSellerForCompanyId,
   resolveActiveCompanyId,
@@ -36,13 +38,20 @@ export function applyProfileToInvoice(
   profile: UserProfile,
   activeCompanyId: string | null | undefined,
 ): InvoiceFormInput {
-  const cid = resolveActiveCompanyId(profile, activeCompanyId);
-  const seller = getSellerForCompanyId(profile, cid);
-  const t = getSellerAlignedTaxDefaults(profile, cid);
-  const taxMode = inferTaxMode(data, profile, seller.stateCode);
+  const profileE = ensureUserProfileDefaults(profile);
+  const cid = resolveActiveCompanyId(profileE, activeCompanyId);
+  const seller = getSellerForCompanyId(profileE, cid);
+  const t = getSellerAlignedTaxDefaults(profileE, cid);
+  const taxMode = inferTaxMode(data, profileE, seller.stateCode);
+  const invoiceNumber = ensureInvoiceNumberForCompanyId(
+    data.invoiceNumber ?? "",
+    profileE,
+    cid,
+  );
   return {
     ...data,
     seller,
+    invoiceNumber,
     placeOfSupplyState: t.placeOfSupplyState,
     placeOfSupplyCode: t.placeOfSupplyCode,
     reverseCharge: t.reverseCharge,

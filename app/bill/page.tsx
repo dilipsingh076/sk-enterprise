@@ -1,4 +1,5 @@
 import { BillPageClient } from "@/components/invoice/BillPageClient";
+import { Box } from "@/components/ui";
 
 export default async function BillPage({
   searchParams,
@@ -7,8 +8,8 @@ export default async function BillPage({
 }) {
   const sp = await searchParams;
   return (
-    <div className="min-h-screen bg-zinc-50 py-6 px-3 sm:py-8 sm:px-4">
+    <Box className="mx-auto w-full px-3 py-6 sm:px-4 sm:py-8">
       <BillPageClient editBillId={sp.billId ?? null} />
-    </div>
+    </Box>
   );
 }

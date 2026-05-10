@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { invoiceSchema } from "@/lib/invoice/schema";
+import { invoiceNumberTaken } from "@/lib/bills/invoiceNumberTaken";
 import { billRecordSchema, readBillsFile, writeBillsFile } from "@/lib/storage/serverJsonStore";
 
 export async function GET() {
@@ -17,6 +18,16 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const invoice = invoiceSchema.parse(body.invoice);
+    const file = await readBillsFile();
+    if (invoiceNumberTaken(file, invoice.invoiceNumber, invoice.seller.gstin)) {
+      return NextResponse.json(
+        {
+          message:
+            "This invoice number is already saved for this company. Use a different number or open the existing bill.",
+        },
+        { status: 409 },
+      );
+    }
     const title =
       typeof body.title === "string" && body.title.trim()
         ? body.title.trim()
@@ -29,7 +40,6 @@ export async function POST(req: Request) {
       title,
       invoice,
     });
-    const file = await readBillsFile();
     file.bills.unshift(record);
     await writeBillsFile(file);
     return NextResponse.json(record);

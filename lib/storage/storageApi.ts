@@ -1,6 +1,7 @@
 "use client";
 
-import type { InvoiceFormInput } from "@/lib/invoice/schema";
+import { partySchema, type InvoiceFormInput, type Party } from "@/lib/invoice/schema";
+import type { UserProfile } from "@/lib/invoice/userProfile";
 import type { ProfileBundle, BillRecord } from "@/lib/storage/serverJsonStore";
 
 async function parseJson<T>(res: Response): Promise<T> {
@@ -86,4 +87,19 @@ export async function updateBill(id: string, invoice: InvoiceFormInput, title?: 
 export async function deleteBill(id: string): Promise<void> {
   const res = await fetch(`/api/storage/bills/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Delete failed");
+}
+
+/** Prepend bill-to to profile recents (dedupe by GSTIN, max 20). */
+export async function pushRecentBillToParty(party: Party): Promise<UserProfile> {
+  const parsed = partySchema.safeParse(party);
+  if (!parsed.success) throw new Error("Invalid bill-to for recents");
+  const p = parsed.data;
+  const bundle = await fetchProfileBundle();
+  const profile = bundle.userProfile;
+  const gst = p.gstin.toUpperCase();
+  const list = profile.recentBillTo ?? [];
+  const nextList = [p, ...list.filter((x) => x.gstin.toUpperCase() !== gst)].slice(0, 20);
+  const userProfile: UserProfile = { ...profile, recentBillTo: nextList };
+  await saveProfileBundle({ ...bundle, userProfile });
+  return userProfile;
 }

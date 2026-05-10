@@ -1,5 +1,21 @@
 import type { LineItem } from "./schema";
 
+/** Gross before discount: qty × rate (2 dp). */
+export function lineGross(line: Pick<LineItem, "quantity" | "rate">): number {
+  return Math.round(line.quantity * line.rate * 100) / 100;
+}
+
+/** Discount in rupees for the line (amount or % of gross), capped at gross. */
+export function lineDiscountRupees(line: LineItem): number {
+  const gross = lineGross(line);
+  const kind = line.discountKind ?? "AMOUNT";
+  const disc = line.discount ?? 0;
+  if (kind === "PERCENT") {
+    return Math.min(gross, Math.round((gross * (disc / 100)) * 100) / 100);
+  }
+  return Math.min(gross, Math.round(disc * 100) / 100);
+}
+
 export type LineComputed = LineItem & {
   taxableValue: number;
 };
@@ -30,8 +46,9 @@ export type InvoiceTotals = {
 };
 
 function lineTaxable(line: LineItem): number {
-  const disc = line.discount ?? 0;
-  return Math.max(0, line.quantity * line.rate - disc);
+  const gross = lineGross(line);
+  const d = lineDiscountRupees(line);
+  return Math.max(0, Math.round((gross - d) * 100) / 100);
 }
 
 export function computeLineItems(lineItems: LineItem[]): LineComputed[] {
