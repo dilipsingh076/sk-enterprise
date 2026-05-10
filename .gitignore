@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local JSON storage (used only when BLOB_READ_WRITE_TOKEN is unset)
+/data/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
