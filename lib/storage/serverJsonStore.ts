@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import { list, put } from "@vercel/blob";
+import { get, put } from "@vercel/blob";
 import { z } from "zod";
 import { invoiceSchema } from "@/lib/invoice/schema";
 import { userProfileSchema } from "@/lib/invoice/userProfile";
@@ -35,26 +35,35 @@ function isVercel(): boolean {
   return process.env.VERCEL === "1";
 }
 
-/** Read JSON from Vercel Blob (pathname is stable; `list` + exact pathname match). */
+/**
+ * Must match the Blob store access in Vercel (Storage → your store).
+ * Defaults to `private` (Vercel’s default for new stores). Set `BLOB_STORE_ACCESS=public` if the store is public.
+ */
+function blobStoreAccess(): "public" | "private" {
+  const raw = process.env.BLOB_STORE_ACCESS?.trim().toLowerCase();
+  if (raw === "public") return "public";
+  return "private";
+}
+
+/** Read JSON from Vercel Blob via SDK `get` (works for private stores with the read/write token). */
 async function readJsonBlob(name: string): Promise<unknown | null> {
   const pathname = blobPath(name);
   const token = blobToken();
-  const { blobs } = await list({ prefix: pathname, token, limit: 100 });
-  const hit = blobs.find((b) => b.pathname === pathname);
-  if (!hit) return null;
-  const res = await fetch(hit.downloadUrl);
-  if (!res.ok) {
-    throw new Error(`Blob read failed for ${pathname}: HTTP ${res.status}`);
-  }
-  return (await res.json()) as unknown;
+  const access = blobStoreAccess();
+  const result = await get(pathname, { access, token });
+  if (!result) return null;
+  if (result.statusCode === 304 || !result.stream) return null;
+  const text = await new Response(result.stream).text();
+  return JSON.parse(text) as unknown;
 }
 
 async function writeJsonBlob(name: string, data: unknown): Promise<void> {
   const pathname = blobPath(name);
   await put(pathname, JSON.stringify(data, null, 2), {
-    access: "public",
+    access: blobStoreAccess(),
     token: blobToken(),
     addRandomSuffix: false,
+    allowOverwrite: true,
     contentType: "application/json",
   });
 }
