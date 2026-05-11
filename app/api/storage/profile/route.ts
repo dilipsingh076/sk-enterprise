@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ZodError } from "zod";
 import { profileBundleSchema, readProfileBundle, writeProfileBundle } from "@/lib/storage/serverJsonStore";
 
 export async function GET() {
@@ -7,7 +8,8 @@ export async function GET() {
     return NextResponse.json(bundle);
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ message: "Failed to read profile" }, { status: 500 });
+    const message = e instanceof Error ? e.message : "Failed to read profile";
+    return NextResponse.json({ message }, { status: 500 });
   }
 }
 
@@ -19,6 +21,10 @@ export async function PUT(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ message: "Invalid profile payload" }, { status: 400 });
+    if (e instanceof ZodError) {
+      return NextResponse.json({ message: "Invalid profile payload" }, { status: 400 });
+    }
+    const message = e instanceof Error ? e.message : "Save failed";
+    return NextResponse.json({ message }, { status: 500 });
   }
 }

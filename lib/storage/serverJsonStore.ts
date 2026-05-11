@@ -15,13 +15,15 @@ const FILE_PROFILE = "profile.json";
 const FILE_DRAFT = "draft.json";
 const FILE_BILLS = "bills.json";
 
-function shouldUseBlob(): boolean {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+function blobStorageEnabled(): boolean {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim());
 }
 
 function blobToken(): string {
-  const t = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!t) throw new Error("BLOB_READ_WRITE_TOKEN missing");
+  const t = process.env.BLOB_READ_WRITE_TOKEN?.trim();
+  if (!t) {
+    throw new Error("BLOB_READ_WRITE_TOKEN is not set.");
+  }
   return t;
 }
 
@@ -29,19 +31,22 @@ function blobPath(name: string): string {
   return `${BLOB_PREFIX}/${name}`;
 }
 
+function isVercel(): boolean {
+  return process.env.VERCEL === "1";
+}
+
+/** Read JSON from Vercel Blob (pathname is stable; `list` + exact pathname match). */
 async function readJsonBlob(name: string): Promise<unknown | null> {
-  try {
-    const pathname = blobPath(name);
-    const token = blobToken();
-    const { blobs } = await list({ prefix: pathname, token, limit: 50 });
-    const hit = blobs.find((b) => b.pathname === pathname);
-    if (!hit) return null;
-    const res = await fetch(hit.downloadUrl);
-    if (!res.ok) return null;
-    return (await res.json()) as unknown;
-  } catch {
-    return null;
+  const pathname = blobPath(name);
+  const token = blobToken();
+  const { blobs } = await list({ prefix: pathname, token, limit: 100 });
+  const hit = blobs.find((b) => b.pathname === pathname);
+  if (!hit) return null;
+  const res = await fetch(hit.downloadUrl);
+  if (!res.ok) {
+    throw new Error(`Blob read failed for ${pathname}: HTTP ${res.status}`);
   }
+  return (await res.json()) as unknown;
 }
 
 async function writeJsonBlob(name: string, data: unknown): Promise<void> {
@@ -75,13 +80,23 @@ async function writeJsonFs(name: string, data: unknown): Promise<void> {
 }
 
 async function readJson(name: string): Promise<unknown | null> {
-  if (shouldUseBlob()) return readJsonBlob(name);
+  if (blobStorageEnabled()) {
+    return readJsonBlob(name);
+  }
   return readJsonFs(name);
 }
 
 async function writeJson(name: string, data: unknown): Promise<void> {
-  if (shouldUseBlob()) await writeJsonBlob(name, data);
-  else await writeJsonFs(name, data);
+  if (blobStorageEnabled()) {
+    await writeJsonBlob(name, data);
+    return;
+  }
+  if (isVercel()) {
+    throw new Error(
+      "On Vercel, set BLOB_READ_WRITE_TOKEN (Vercel Blob read/write token) so storage uses Blob only.",
+    );
+  }
+  await writeJsonFs(name, data);
 }
 
 export const profileBundleSchema = z.object({
