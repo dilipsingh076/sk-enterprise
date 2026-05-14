@@ -2,6 +2,7 @@
 
 import { partySchema, type InvoiceFormInput, type Party } from "@/lib/invoice/schema";
 import type { UserProfile } from "@/lib/invoice/userProfile";
+import { mergeRecentBillToUserProfile } from "@/lib/profile/recentBillTo";
 import type { ProfileBundle, BillRecord } from "@/lib/storage/serverJsonStore";
 
 async function parseJson<T>(res: Response): Promise<T> {
@@ -16,11 +17,6 @@ async function parseJson<T>(res: Response): Promise<T> {
 export async function fetchProfileBundle(): Promise<ProfileBundle> {
   const res = await fetch("/api/storage/profile", { cache: "no-store" });
   return parseJson<ProfileBundle>(res);
-}
-
-export async function saveProfileActiveCompanyId(id: string): Promise<void> {
-  const bundle = await fetchProfileBundle();
-  await saveProfileBundle({ ...bundle, activeCompanyId: id });
 }
 
 export async function saveProfileBundle(bundle: ProfileBundle): Promise<void> {
@@ -61,6 +57,23 @@ export async function fetchBills(): Promise<BillRecord[]> {
   return data.bills;
 }
 
+let billsListCache: { bills: BillRecord[]; fetchedAt: number } | null = null;
+const BILLS_LIST_CACHE_MS = 25_000;
+
+/** Same as {@link fetchBills} but reuses a short in-memory cache to avoid hammering `/api/storage/bills` (e.g. issuer + invoice no. checks). */
+export async function fetchBillsCached(options?: { force?: boolean }): Promise<BillRecord[]> {
+  if (!options?.force && billsListCache && Date.now() - billsListCache.fetchedAt < BILLS_LIST_CACHE_MS) {
+    return billsListCache.bills;
+  }
+  const bills = await fetchBills();
+  billsListCache = { bills, fetchedAt: Date.now() };
+  return bills;
+}
+
+export function invalidateBillsListCache(): void {
+  billsListCache = null;
+}
+
 export async function fetchBill(id: string): Promise<BillRecord> {
   const res = await fetch(`/api/storage/bills/${encodeURIComponent(id)}`, { cache: "no-store" });
   return parseJson<BillRecord>(res);
@@ -72,7 +85,9 @@ export async function createBill(invoice: InvoiceFormInput, title?: string): Pro
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ invoice, title }),
   });
-  return parseJson<BillRecord>(res);
+  const record = await parseJson<BillRecord>(res);
+  invalidateBillsListCache();
+  return record;
 }
 
 export async function updateBill(id: string, invoice: InvoiceFormInput, title?: string): Promise<BillRecord> {
@@ -81,25 +96,30 @@ export async function updateBill(id: string, invoice: InvoiceFormInput, title?: 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ invoice, title }),
   });
-  return parseJson<BillRecord>(res);
+  const record = await parseJson<BillRecord>(res);
+  invalidateBillsListCache();
+  return record;
 }
 
 export async function deleteBill(id: string): Promise<void> {
   const res = await fetch(`/api/storage/bills/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Delete failed");
+  invalidateBillsListCache();
 }
 
-/** Prepend bill-to to profile recents (dedupe by GSTIN, max 20). */
-export async function pushRecentBillToParty(party: Party): Promise<UserProfile> {
+/**
+ * Prepend bill-to to profile recents (dedupe by GSTIN, max 20).
+ * Pass `currentBundle` when you already have profile + activeCompanyId (avoids GET).
+ */
+export async function pushRecentBillToParty(
+  party: Party,
+  currentBundle?: ProfileBundle,
+): Promise<UserProfile> {
   const parsed = partySchema.safeParse(party);
   if (!parsed.success) throw new Error("Invalid bill-to for recents");
   const p = parsed.data;
-  const bundle = await fetchProfileBundle();
-  const profile = bundle.userProfile;
-  const gst = p.gstin.toUpperCase();
-  const list = profile.recentBillTo ?? [];
-  const nextList = [p, ...list.filter((x) => x.gstin.toUpperCase() !== gst)].slice(0, 20);
-  const userProfile: UserProfile = { ...profile, recentBillTo: nextList };
+  const bundle = currentBundle ?? (await fetchProfileBundle());
+  const userProfile = mergeRecentBillToUserProfile(bundle.userProfile, p);
   await saveProfileBundle({ ...bundle, userProfile });
   return userProfile;
 }

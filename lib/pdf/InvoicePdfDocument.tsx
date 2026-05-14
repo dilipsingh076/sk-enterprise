@@ -16,6 +16,18 @@ const SHADE = "#e8e8e8";
 const TAX_BAR = "#cfcfcf";
 const HEADER_BG = "#0a0a0a";
 
+/** Blank strip under line items: shrinks as more rows are added; keeps a minimum for short lists. */
+const LINE_ITEMS_FILL_MIN = 28;
+const LINE_ITEMS_BLOCK_TARGET = 160;
+const LINE_ITEMS_HEADER_APPROX = 30;
+const LINE_ITEMS_ROW_APPROX = 24;
+
+function lineItemsBlankFillHeight(lineCount: number): number {
+  const used =
+    LINE_ITEMS_HEADER_APPROX + Math.max(0, lineCount) * LINE_ITEMS_ROW_APPROX;
+  return Math.max(LINE_ITEMS_FILL_MIN, LINE_ITEMS_BLOCK_TARGET - used);
+}
+
 const styles = StyleSheet.create({
   page: {
     fontSize: 8,
@@ -220,9 +232,7 @@ const styles = StyleSheet.create({
 
   thRow: {
     flexDirection: "row",
-    borderBottomWidth: 1,
-    borderColor: GRID,
-    backgroundColor: SHADE,
+    alignItems: "stretch",
   },
   th: {
     fontFamily: "Helvetica-Bold",
@@ -230,22 +240,76 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 3,
   },
+  /** Line-items table header text (padding lives on the cell). */
+  itemsThText: {
+    fontFamily: "Helvetica-Bold",
+    fontSize: 7.5,
+    paddingHorizontal: 3,
+    paddingVertical: 0,
+  },
+  itemsHeaderCell: {
+    alignSelf: "stretch",
+    justifyContent: "center",
+    backgroundColor: SHADE,
+    borderBottomWidth: 1,
+    borderColor: GRID,
+    paddingVertical: 4,
+    paddingHorizontal: 0,
+  },
+  itemsHeaderCellSplit: {
+    borderLeftWidth: 1,
+    borderColor: GRID,
+  },
   tr: {
     flexDirection: "row",
+    alignItems: "stretch",
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+  },
+  itemsBodyCell: {
+    alignSelf: "stretch",
+    justifyContent: "center",
+    borderBottomWidth: 1,
+    borderColor: GRID,
     paddingVertical: 3,
     paddingHorizontal: 0,
   },
+  itemsBodyCellSplit: {
+    borderLeftWidth: 1,
+    borderColor: GRID,
+  },
+  itemsBodyDescCell: {
+    alignSelf: "stretch",
+    justifyContent: "flex-start",
+    borderBottomWidth: 1,
+    borderLeftWidth: 1,
+    borderColor: GRID,
+    paddingVertical: 3,
+    paddingHorizontal: 3,
+  },
+
   tdC: { fontSize: 7.5, textAlign: "center", paddingHorizontal: 3 },
   tdL: { fontSize: 7.5, textAlign: "left", paddingHorizontal: 3 },
   tdR: { fontSize: 7.5, textAlign: "right", paddingHorizontal: 3 },
 
   vline: { borderLeftWidth: 1, borderColor: GRID },
 
-  blankFill: { minHeight: 70 },
+  blankFillRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
 
-  taxBlock: {
-    borderTopWidth: 1,
+  /** HSN / tax sub-table (separate column widths from line items). */
+  taxThRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    borderBottomWidth: 1,
     borderColor: GRID,
+    backgroundColor: SHADE,
+  },
+  taxCellWrap: {
+    alignSelf: "stretch",
+    justifyContent: "center",
   },
 
   totalsRow: {
@@ -504,6 +568,7 @@ export function InvoicePdfDocument({
   }`;
   const shipParty = shipSame ? billTo : shipToResolved;
   const shipStateBadge = shipParty.stateCode || "";
+  const lineItemsFillH = lineItemsBlankFillHeight(totals.lines.length);
 
   return (
     <Document>
@@ -651,75 +716,117 @@ export function InvoicePdfDocument({
             </View>
           )}
 
-          <View style={styles.thRow}>
-            <Text style={[styles.th, colSn, { textAlign: "center" }]}>S. No.</Text>
-            <Text style={[styles.th, colDesc, styles.vline]}>Description of Goods</Text>
-            <Text style={[styles.th, colHsn, styles.vline, { textAlign: "center" }]}>
-              HSN/SAC
-            </Text>
-            <Text style={[styles.th, colQty, styles.vline, { textAlign: "center" }]}>
-              Quantity
-            </Text>
-            <Text style={[styles.th, colUom, styles.vline, { textAlign: "center" }]}>
-              UoM
-            </Text>
-            <Text style={[styles.th, colRate, styles.vline, { textAlign: "right" }]}>Rate</Text>
-            <Text style={[styles.th, colAmt, styles.vline, { textAlign: "right" }]}>
-              Amount
-            </Text>
-          </View>
-          {totals.lines.map((line, i) => (
-            <View key={i} style={styles.tr} wrap={false}>
-              <Text style={[styles.tdC, colSn]}>{i + 1}</Text>
-              <View style={[colDesc, styles.vline, { paddingHorizontal: 3 }]}>
-                <Multiline text={line.description} />
+          <View wrap={false}>
+            <View style={styles.thRow}>
+              <View style={[colSn, styles.itemsHeaderCell]}>
+                <Text style={[styles.itemsThText, { textAlign: "center" }]}>
+                  S. No.
+                </Text>
               </View>
-              <Text style={[styles.tdC, colHsn, styles.vline]}>{line.hsn}</Text>
-              <Text style={[styles.tdR, colQty, styles.vline]}>{fmtQty(line.quantity)}</Text>
-              <Text style={[styles.tdC, colUom, styles.vline]}>{line.unit}</Text>
-              <Text style={[styles.tdR, colRate, styles.vline]}>{fmt(line.rate)}</Text>
-              <Text style={[styles.tdR, colAmt, styles.vline]}>{fmt(line.taxableValue)}</Text>
+              <View style={[colDesc, styles.itemsHeaderCell, styles.itemsHeaderCellSplit]}>
+                <Text style={styles.itemsThText}>Description of Goods</Text>
+              </View>
+              <View style={[colHsn, styles.itemsHeaderCell, styles.itemsHeaderCellSplit]}>
+                <Text style={[styles.itemsThText, { textAlign: "center" }]}>HSN/SAC</Text>
+              </View>
+              <View style={[colQty, styles.itemsHeaderCell, styles.itemsHeaderCellSplit]}>
+                <Text style={[styles.itemsThText, { textAlign: "center" }]}>Quantity</Text>
+              </View>
+              <View style={[colUom, styles.itemsHeaderCell, styles.itemsHeaderCellSplit]}>
+                <Text style={[styles.itemsThText, { textAlign: "center" }]}>UoM</Text>
+              </View>
+              <View style={[colRate, styles.itemsHeaderCell, styles.itemsHeaderCellSplit]}>
+                <Text style={[styles.itemsThText, { textAlign: "right" }]}>Rate</Text>
+              </View>
+              <View style={[colAmt, styles.itemsHeaderCell, styles.itemsHeaderCellSplit]}>
+                <Text style={[styles.itemsThText, { textAlign: "right" }]}>Amount</Text>
+              </View>
             </View>
-          ))}
+            {totals.lines.map((line, i) => (
+              <View key={i} style={styles.tr} wrap={false}>
+                <View style={[colSn, styles.itemsBodyCell]}>
+                  <Text style={styles.tdC}>{i + 1}</Text>
+                </View>
+                <View style={[colDesc, styles.itemsBodyDescCell]}>
+                  <Multiline text={line.description} />
+                </View>
+                <View style={[colHsn, styles.itemsBodyCell, styles.itemsBodyCellSplit]}>
+                  <Text style={styles.tdC}>{line.hsn}</Text>
+                </View>
+                <View style={[colQty, styles.itemsBodyCell, styles.itemsBodyCellSplit]}>
+                  <Text style={styles.tdR}>{fmtQty(line.quantity)}</Text>
+                </View>
+                <View style={[colUom, styles.itemsBodyCell, styles.itemsBodyCellSplit]}>
+                  <Text style={styles.tdC}>{line.unit}</Text>
+                </View>
+                <View style={[colRate, styles.itemsBodyCell, styles.itemsBodyCellSplit]}>
+                  <Text style={styles.tdR}>{fmt(line.rate)}</Text>
+                </View>
+                <View style={[colAmt, styles.itemsBodyCell, styles.itemsBodyCellSplit]}>
+                  <Text style={styles.tdR}>{fmt(line.taxableValue)}</Text>
+                </View>
+              </View>
+            ))}
 
-          <View style={[styles.tr, styles.blankFill]} />
+            <View style={[styles.blankFillRow, { height: lineItemsFillH }]} wrap={false}>
+              <View style={[colSn, styles.itemsBodyCell]} />
+              <View style={[colDesc, styles.itemsBodyDescCell]} />
+              <View style={[colHsn, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
+              <View style={[colQty, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
+              <View style={[colUom, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
+              <View style={[colRate, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
+              <View style={[colAmt, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
+            </View>
+          </View>
 
-          <View style={[styles.thRow, styles.taxBlock]}>
-            <Text style={[styles.th, { width: "20%", textAlign: "left" }]}>HSN Code</Text>
-            <Text style={[styles.th, { width: "22%", textAlign: "right" }, styles.vline]}>
-              Taxable
-            </Text>
-            <Text style={[styles.th, { width: "12%", textAlign: "center" }, styles.vline]}>
-              {totals.taxMode === "IGST" ? "IGST %" : "GST %"}
-            </Text>
-            <Text style={[styles.th, { width: "22%", textAlign: "right" }, styles.vline]}>
-              {totals.taxMode === "IGST" ? "IGST Amt" : "CGST+SGST"}
-            </Text>
-            <Text style={[styles.th, { width: "24%", textAlign: "right" }, styles.vline]}>
-              Quantity
-            </Text>
+          <View style={styles.taxThRow}>
+            <View style={[{ width: "20%" }, styles.taxCellWrap]}>
+              <Text style={[styles.th, { textAlign: "left" }]}>HSN Code</Text>
+            </View>
+            <View style={[{ width: "22%" }, styles.vline, styles.taxCellWrap]}>
+              <Text style={[styles.th, { textAlign: "right" }]}>Taxable</Text>
+            </View>
+            <View style={[{ width: "12%" }, styles.vline, styles.taxCellWrap]}>
+              <Text style={[styles.th, { textAlign: "center" }]}>
+                {totals.taxMode === "IGST" ? "IGST %" : "GST %"}
+              </Text>
+            </View>
+            <View style={[{ width: "22%" }, styles.vline, styles.taxCellWrap]}>
+              <Text style={[styles.th, { textAlign: "right" }]}>
+                {totals.taxMode === "IGST" ? "IGST Amt" : "CGST+SGST"}
+              </Text>
+            </View>
+            <View style={[{ width: "24%" }, styles.vline, styles.taxCellWrap]}>
+              <Text style={[styles.th, { textAlign: "right" }]}>Quantity</Text>
+            </View>
           </View>
           {totals.hsnSummary.map((row) => (
             <View key={row.hsn} style={styles.tr} wrap={false}>
-              <Text style={[styles.tdL, { width: "20%" }]}>{row.hsn}</Text>
-              <Text style={[styles.tdR, { width: "22%" }, styles.vline]}>
-                {fmt(row.taxableValue)}
-              </Text>
-              <Text style={[styles.tdC, { width: "12%" }, styles.vline]}>
-                {fmtPct(row.taxRatePercent)}
-              </Text>
-              <Text style={[styles.tdR, { width: "22%" }, styles.vline]}>
-                {totals.taxMode === "IGST"
-                  ? fmt(row.igstAmount)
-                  : `${fmt(row.cgstAmount)} + ${fmt(row.sgstAmount)}`}
-              </Text>
-              <Text style={[styles.tdR, { width: "24%" }, styles.vline]}>
-                {fmtQty(
-                  totals.lines
-                    .filter((l) => l.hsn === row.hsn)
-                    .reduce((s, l) => s + l.quantity, 0),
-                )}
-              </Text>
+              <View style={[{ width: "20%" }, styles.taxCellWrap]}>
+                <Text style={styles.tdL}>{row.hsn}</Text>
+              </View>
+              <View style={[{ width: "22%" }, styles.vline, styles.taxCellWrap]}>
+                <Text style={styles.tdR}>{fmt(row.taxableValue)}</Text>
+              </View>
+              <View style={[{ width: "12%" }, styles.vline, styles.taxCellWrap]}>
+                <Text style={styles.tdC}>{fmtPct(row.taxRatePercent)}</Text>
+              </View>
+              <View style={[{ width: "22%" }, styles.vline, styles.taxCellWrap]}>
+                <Text style={styles.tdR}>
+                  {totals.taxMode === "IGST"
+                    ? fmt(row.igstAmount)
+                    : `${fmt(row.cgstAmount)} + ${fmt(row.sgstAmount)}`}
+                </Text>
+              </View>
+              <View style={[{ width: "24%" }, styles.vline, styles.taxCellWrap]}>
+                <Text style={styles.tdR}>
+                  {fmtQty(
+                    totals.lines
+                      .filter((l) => l.hsn === row.hsn)
+                      .reduce((s, l) => s + l.quantity, 0),
+                  )}
+                </Text>
+              </View>
             </View>
           ))}
 
@@ -802,12 +909,31 @@ export function InvoicePdfDocument({
             ) : null}
             <Text style={styles.termsTitle}>Terms &amp; Condition :</Text>
             <Multiline text={termsText} style={styles.termsLine} />
+            <View style={{ marginTop: 6 }}>
+              <Text
+                style={{
+                  fontFamily: "Helvetica-Bold",
+                  fontSize: 10,
+                  marginBottom: 2,
+                }}
+              >
+                {seller.name}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: "Helvetica-Bold",
+                  fontSize: 10,
+                  marginBottom: 2,
+                }}
+              >
+                Account No.: {seller.accountNo}
+              </Text>
+              <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10 }}>
+                IFSC: {seller.ifsc}
+                {seller.branch?.trim() ? `, Branch: ${seller.branch.trim()}` : ""}
+              </Text>
+            </View>
             <Text style={[styles.termsLine, { marginTop: 4 }]}>
-              <Text style={{ fontFamily: "Helvetica-Bold" }}>Bank: </Text>
-              {seller.bankName} | A/c {seller.accountNo} | IFSC {seller.ifsc}
-              {seller.branch ? ` | ${seller.branch}` : ""}
-            </Text>
-            <Text style={[styles.termsLine, { marginTop: 2 }]}>
               Tax Amount (in words) : {taxAmountWords}
             </Text>
           </View>
@@ -877,9 +1003,6 @@ export function InvoicePdfDocument({
               </>
             ) : null}
           </Text>
-          {seller.certificationsLine?.trim() ? (
-            <Text style={styles.footerText}>{seller.certificationsLine.trim()}</Text>
-          ) : null}
         </View>
       </Page>
     </Document>

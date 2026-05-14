@@ -43,7 +43,11 @@ import {
   Heading,
 } from "@/components/ui";
 import { cn } from "@/components/ui/cn";
-import { DEFAULT_USER_PROFILE } from "@/lib/profile/profileStorage";
+import {
+  DEFAULT_USER_PROFILE,
+  ensureUserProfileDefaults,
+  resolveActiveCompanyId,
+} from "@/lib/profile/profileStorage";
 import { fetchProfileBundle, saveProfileBundle } from "@/lib/storage/storageApi";
 import { userProfileSchema, type UserProfile } from "@/lib/invoice/userProfile";
 
@@ -53,6 +57,8 @@ export function ProfileForm() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [companyTab, setCompanyTab] = useState<0 | 1>(0);
   const [taxSectionOpen, setTaxSectionOpen] = useState(true);
+  /** Last known issuer selection for invoice (from bundle); avoids GET before every save. */
+  const [activeCompanyIdFromBundle, setActiveCompanyIdFromBundle] = useState<string | null>(null);
 
   const methods = useForm<UserProfile>({
     resolver: zodResolver(userProfileSchema) as Resolver<UserProfile>,
@@ -84,10 +90,14 @@ export function ProfileForm() {
       try {
         const bundle = await fetchProfileBundle();
         if (cancelled) return;
-        reset(bundle.userProfile);
+        const profile = ensureUserProfileDefaults(bundle.userProfile);
+        const ac = resolveActiveCompanyId(profile, bundle.activeCompanyId);
+        setActiveCompanyIdFromBundle(ac);
+        reset(profile);
       } catch (e) {
         if (cancelled) return;
         setLoadError(e instanceof Error ? e.message : "Could not load profile");
+        setActiveCompanyIdFromBundle(DEFAULT_USER_PROFILE.defaultCompanyId);
         reset(DEFAULT_USER_PROFILE);
       } finally {
         if (!cancelled) setMounted(true);
@@ -100,16 +110,17 @@ export function ProfileForm() {
 
   const onSubmit = handleSubmit(async (data) => {
     try {
-      const bundle = await fetchProfileBundle();
       const active =
-        bundle.activeCompanyId && data.companies.some((c) => c.id === bundle.activeCompanyId)
-          ? bundle.activeCompanyId
+        activeCompanyIdFromBundle &&
+        data.companies.some((c) => c.id === activeCompanyIdFromBundle)
+          ? activeCompanyIdFromBundle
           : data.defaultCompanyId;
       await saveProfileBundle({
         version: 1,
         userProfile: data,
         activeCompanyId: active,
       });
+      setActiveCompanyIdFromBundle(active);
       setLoadError(null);
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("e-bill-profile-updated"));
@@ -129,6 +140,7 @@ export function ProfileForm() {
         userProfile: DEFAULT_USER_PROFILE,
         activeCompanyId: DEFAULT_USER_PROFILE.defaultCompanyId,
       });
+      setActiveCompanyIdFromBundle(DEFAULT_USER_PROFILE.defaultCompanyId);
       reset(DEFAULT_USER_PROFILE);
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("e-bill-profile-updated"));

@@ -39,14 +39,15 @@ import {
   clearDraftRemote,
   createBill,
   fetchBill,
-  fetchBills,
+  fetchBillsCached,
   fetchDraft,
   fetchProfileBundle,
   pushRecentBillToParty,
   saveDraft,
-  saveProfileActiveCompanyId,
+  saveProfileBundle,
   updateBill,
 } from "@/lib/storage/storageApi";
+import type { BillRecord, ProfileBundle } from "@/lib/storage/serverJsonStore";
 import {
   firstInvoiceErrorSectionId,
   INVOICE_SECTION,
@@ -224,7 +225,10 @@ const IssuerSelect = memo(function IssuerSelect({
   return (
     <FormSection id="section-issuer" title="Issue this bill as" dense leading={<Building2 aria-hidden />}>
       <Label>Company (seller on PDF)</Label>
-      <Select value={activeCompanyId} onChange={(e) => onChangeCompany(e.target.value)}>
+      <Select
+        value={activeCompanyId}
+        onChange={(e) => onChangeCompany(e.target.value)}
+      >
         {profile.companies.map((c) => (
           <Option key={c.id} value={c.id}>
             {c.label}
@@ -293,6 +297,8 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dupCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didInit = useRef(false);
+  /** Prevents overlapping issuer switches (race on slow Blob PUT). */
+  const issuerSwitchInFlight = useRef(false);
 
   const methods = useForm<InvoiceFormInput>({
     resolver: zodResolver(invoiceSchema) as Resolver<InvoiceFormInput>,
@@ -392,19 +398,22 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
     didInit.current = true;
     void (async () => {
       try {
-        const bundle = await fetchProfileBundle();
+        const [bundle, billOrDraft] = await Promise.all([
+          fetchProfileBundle(),
+          editBillId ? fetchBill(editBillId) : fetchDraft(),
+        ]);
         const profile = ensureUserProfileDefaults(bundle.userProfile);
         const activeCompanyId = resolveActiveCompanyId(profile, bundle.activeCompanyId);
         setWorkspace({ profile, activeCompanyId });
 
         let merged = buildBillFormDefaults(profile, activeCompanyId);
         if (editBillId) {
-          const bill = await fetchBill(editBillId);
+          const bill = billOrDraft as BillRecord;
           merged = normalizeLoadedInvoiceForm(
             applyProfileToInvoice(bill.invoice, profile, activeCompanyId),
           );
         } else {
-          const draft = await fetchDraft();
+          const draft = billOrDraft as InvoiceFormInput | null;
           if (draft) {
             merged = normalizeLoadedInvoiceForm(
               applyProfileToInvoice(draft, profile, activeCompanyId),
@@ -488,7 +497,7 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
           return;
         }
         try {
-          const bills = await fetchBills();
+          const bills = await fetchBillsCached();
           const key = raw.toLowerCase();
           const hit = bills.find(
             (b) =>
@@ -576,28 +585,50 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
   const onChangeIssuer = useCallback(
     async (id: string) => {
       if (!workspace) return;
+      if (id === workspace.activeCompanyId) return;
+      if (issuerSwitchInFlight.current) return;
+      issuerSwitchInFlight.current = true;
+
+      const prevWorkspace = workspace;
       const prevCompanyId = workspace.activeCompanyId;
+      const profile = ensureUserProfileDefaults(workspace.profile);
+      const activeCompanyId = resolveActiveCompanyId(profile, id);
+      const formSnapshot = getValues();
+
+      // Optimistic UI: Blob PUT on Vercel is slow; update immediately, persist in background.
+      setWorkspace({ profile, activeCompanyId });
+      reset(
+        normalizeLoadedInvoiceForm(
+          applyProfileToInvoice(formSnapshot, profile, activeCompanyId),
+        ),
+      );
+      const invAligned = alignInvoiceNumberPrefix(
+        getValues("invoiceNumber") ?? "",
+        profile,
+        prevCompanyId,
+        activeCompanyId,
+      );
+      setValue("invoiceNumber", invAligned, { shouldValidate: true });
+      void trigger();
+
       try {
-        await saveProfileActiveCompanyId(id);
-        const bundle = await fetchProfileBundle();
-        const profile = ensureUserProfileDefaults(bundle.userProfile);
-        const activeCompanyId = resolveActiveCompanyId(profile, bundle.activeCompanyId);
-        setWorkspace({ profile, activeCompanyId });
+        await saveProfileBundle({
+          version: 1,
+          userProfile: profile,
+          activeCompanyId,
+        });
+        setSubmitError(null);
+      } catch (e) {
+        setWorkspace(prevWorkspace);
         reset(
           normalizeLoadedInvoiceForm(
-            applyProfileToInvoice(getValues(), profile, activeCompanyId),
+            applyProfileToInvoice(formSnapshot, prevWorkspace.profile, prevWorkspace.activeCompanyId),
           ),
         );
-        const invAligned = alignInvoiceNumberPrefix(
-          getValues("invoiceNumber") ?? "",
-          profile,
-          prevCompanyId,
-          activeCompanyId,
-        );
-        setValue("invoiceNumber", invAligned, { shouldValidate: true });
         void trigger();
-      } catch (e) {
         setSubmitError(e instanceof Error ? e.message : "Could not switch company");
+      } finally {
+        issuerSwitchInFlight.current = false;
       }
     },
     [workspace, reset, getValues, setValue, trigger],
@@ -615,7 +646,9 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
       setSubmitError(null);
       setPreviewLoading(true);
       try {
-        const { blob } = await fetchInvoicePdf(payload, "inline");
+        const { blob } = await fetchInvoicePdf(payload, "inline", {
+          userProfile: workspace?.profile,
+        });
         if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
         previewUrlRef.current = URL.createObjectURL(blob);
         setPreviewUrl(previewUrlRef.current);
@@ -637,7 +670,7 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
 
   const onUpdateSavedBill = handleSubmit(
     async (data) => {
-      if (!editBillId) return;
+      if (!editBillId || !workspace) return;
       const payload = reconcileInvoiceNumber(data);
       setUpdateLoading(true);
       setSubmitError(null);
@@ -647,11 +680,19 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
           payload,
           `${payload.invoiceNumber} — ${payload.billTo.name}`,
         );
-        await pushRecentBillToParty(payload.billTo).catch(() => {});
-        const bundle = await fetchProfileBundle();
-        const profile = ensureUserProfileDefaults(bundle.userProfile);
-        const activeCompanyId = resolveActiveCompanyId(profile, bundle.activeCompanyId);
-        setWorkspace({ profile, activeCompanyId });
+        try {
+          const userProfile = await pushRecentBillToParty(payload.billTo, {
+            version: 1,
+            userProfile: ensureUserProfileDefaults(workspace.profile),
+            activeCompanyId: workspace.activeCompanyId,
+          });
+          setWorkspace({
+            profile: userProfile,
+            activeCompanyId: resolveActiveCompanyId(userProfile, workspace.activeCompanyId),
+          });
+        } catch {
+          /* recents non-blocking */
+        }
         setSuccessMsg("Saved bill updated.");
       } catch (e) {
         setSubmitError(e instanceof Error ? e.message : "Update failed");
@@ -664,12 +705,15 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
 
   const onSubmit = handleSubmit(
     async (data) => {
+      if (!workspace) return;
       const payload = reconcileInvoiceNumber(data);
       setSubmitError(null);
       setSuccessMsg(null);
       setLoading(true);
       try {
-        const { blob, filename } = await fetchInvoicePdf(payload, "attachment");
+        const { blob, filename } = await fetchInvoicePdf(payload, "attachment", {
+          userProfile: workspace?.profile,
+        });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -687,12 +731,24 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
           await createBill(payload, `${payload.invoiceNumber} — ${payload.billTo.name}`);
         }
         await clearDraftRemote();
-        await pushRecentBillToParty(payload.billTo).catch(() => {});
-        const bundle = await fetchProfileBundle();
-        const profile = ensureUserProfileDefaults(bundle.userProfile);
-        const activeCompanyId = resolveActiveCompanyId(profile, bundle.activeCompanyId);
-        setWorkspace({ profile, activeCompanyId });
-        const next = formStateForNextBill(profile, activeCompanyId);
+
+        const recentsBundle: ProfileBundle = {
+          version: 1,
+          userProfile: ensureUserProfileDefaults(workspace.profile),
+          activeCompanyId: workspace.activeCompanyId,
+        };
+        let profileAfterRecents = recentsBundle.userProfile;
+        try {
+          profileAfterRecents = await pushRecentBillToParty(payload.billTo, recentsBundle);
+        } catch {
+          /* recents non-blocking */
+        }
+        const activeCompanyId = resolveActiveCompanyId(
+          profileAfterRecents,
+          recentsBundle.activeCompanyId,
+        );
+        setWorkspace({ profile: profileAfterRecents, activeCompanyId });
+        const next = formStateForNextBill(profileAfterRecents, activeCompanyId);
         reset(next);
         void trigger();
         clearPreview();
@@ -874,6 +930,20 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
                   <Input type="date" {...register("invoiceDate")} />
                   {errors.invoiceDate ? (
                     <Text className="mt-1 text-xs text-red-600">{errors.invoiceDate.message}</Text>
+                  ) : null}
+                </Field>
+                <Field>
+                  <Label className={fieldLabelClass}>Purchase order no.</Label>
+                  <Input {...register("poNumber")} placeholder="e.g. PO-2025-0142" autoComplete="off" />
+                  {errors.poNumber ? (
+                    <Text className="mt-1 text-xs text-red-600">{errors.poNumber.message}</Text>
+                  ) : null}
+                </Field>
+                <Field>
+                  <Label className={fieldLabelClass}>Purchase order date</Label>
+                  <Input type="date" {...register("purchaseOrderDate")} />
+                  {errors.purchaseOrderDate ? (
+                    <Text className="mt-1 text-xs text-red-600">{errors.purchaseOrderDate.message}</Text>
                   ) : null}
                 </Field>
               </Grid>

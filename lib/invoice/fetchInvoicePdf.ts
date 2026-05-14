@@ -1,15 +1,23 @@
 import type { InvoiceFormInput } from "@/lib/invoice/schema";
+import type { UserProfile } from "@/lib/invoice/userProfile";
 import { ensureInvoiceNumberForSeller, ensureUserProfileDefaults } from "@/lib/profile/profileStorage";
 import { fetchProfileBundle } from "@/lib/storage/storageApi";
 
 export type InvoicePdfDisposition = "attachment" | "inline";
 
+export type FetchInvoicePdfOptions = {
+  /** When set, skips `fetchProfileBundle()` (PDF API uses request body only). */
+  userProfile?: UserProfile;
+};
+
 export async function fetchInvoicePdf(
   data: InvoiceFormInput,
   disposition: InvoicePdfDisposition,
+  options?: FetchInvoicePdfOptions,
 ): Promise<{ blob: Blob; filename: string }> {
-  const bundle = await fetchProfileBundle();
-  const profile = ensureUserProfileDefaults(bundle.userProfile);
+  const profile = ensureUserProfileDefaults(
+    options?.userProfile ?? (await fetchProfileBundle()).userProfile,
+  );
   const invoiceNumber = ensureInvoiceNumberForSeller(data.invoiceNumber, profile, data.seller.gstin);
   const payload: InvoiceFormInput = { ...data, invoiceNumber };
 
