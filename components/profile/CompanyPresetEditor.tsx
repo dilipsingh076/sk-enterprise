@@ -128,6 +128,23 @@ function CompanyPresetEditorInner({
             ) : null}
           </Field>
           <Field>
+            <Label>Pincode</Label>
+            <Input
+              {...register(cp(index, "seller.pincode"))}
+              maxLength={6}
+              inputMode="numeric"
+              autoComplete="postal-code"
+              placeholder="e.g. 248013"
+            />
+            {e0?.seller?.pincode ? (
+              <Text className="mt-1 text-xs text-red-600">{e0.seller.pincode.message}</Text>
+            ) : null}
+          </Field>
+          <Field>
+            <Label>City (optional)</Label>
+            <Input {...register(cp(index, "seller.city"))} autoComplete="address-level2" />
+          </Field>
+          <Field>
             <Label>GSTIN</Label>
             <Input {...register(cp(index, "seller.gstin"))} maxLength={15} />
             {e0?.seller?.gstin ? (

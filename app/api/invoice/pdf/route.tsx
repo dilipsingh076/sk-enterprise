@@ -1,5 +1,6 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { NextResponse } from "next/server";
+import { prepareInvoicePayload } from "@/lib/invoice/billTaxDefaults";
 import { computeInvoiceTotals } from "@/lib/invoice/calculations";
 import { getBrandingLogoDataUri } from "@/lib/pdf/brandingLogo";
 import { InvoicePdfDocument } from "@/lib/pdf/InvoicePdfDocument";
@@ -29,13 +30,12 @@ export async function POST(req: Request) {
     );
   }
 
-  const invoice = resolveInvoice(parsed.data);
+  const invoice = resolveInvoice(prepareInvoicePayload(parsed.data));
   const totals = computeInvoiceTotals(
     invoice.lineItems,
     invoice.taxMode,
     invoice.gstPercent,
     invoice.extraCharges ?? 0,
-    invoice.roundOff ?? 0,
   );
   const amountWords = amountInWordsInr(totals.grandTotal);
   const taxAmountWords = amountInWordsInr(totals.totalTax);

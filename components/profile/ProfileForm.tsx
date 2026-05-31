@@ -5,11 +5,8 @@ import {
   AlertCircle,
   Building2,
   CheckCircle2,
-  ChevronDown,
   Info,
   Loader2,
-  MapPin,
-  Percent,
   RotateCcw,
   Save,
   Sparkles,
@@ -23,13 +20,10 @@ import {
   Banner,
   Box,
   Button,
-  Checkbox,
-  Details,
   Field,
   Form,
   Grid,
   Header,
-  Input,
   Label,
   Option,
   Row,
@@ -37,8 +31,6 @@ import {
   Select,
   Span,
   Stack,
-  Strong,
-  Summary,
   Text,
   Heading,
 } from "@/components/ui";
@@ -56,7 +48,6 @@ export function ProfileForm() {
   const [mounted, setMounted] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [companyTab, setCompanyTab] = useState<0 | 1>(0);
-  const [taxSectionOpen, setTaxSectionOpen] = useState(true);
   /** Last known issuer selection for invoice (from bundle); avoids GET before every save. */
   const [activeCompanyIdFromBundle, setActiveCompanyIdFromBundle] = useState<string | null>(null);
 
@@ -68,7 +59,6 @@ export function ProfileForm() {
   });
 
   const {
-    register,
     control,
     handleSubmit,
     reset,
@@ -320,118 +310,6 @@ export function ProfileForm() {
             <Text className="mt-1 text-xs text-red-600">{errors.defaultCompanyId.message}</Text>
           ) : null}
         </FormSection>
-
-        <Details
-          className="group scroll-mt-16 rounded-xl border border-zinc-200 bg-white open:shadow-sm"
-          open={taxSectionOpen}
-          onToggle={(e) => setTaxSectionOpen((e.target as HTMLDetailsElement).open)}
-        >
-          <Summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 border-b border-transparent px-4 py-3 text-sm font-semibold text-zinc-900 open:border-zinc-100 [&::-webkit-details-marker]:hidden sm:px-5 sm:py-3.5">
-            <ChevronDown className="h-4 w-4 shrink-0 text-zinc-400 transition-transform group-open:-rotate-180" aria-hidden />
-            <Percent className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
-            <Span>Shared tax &amp; place of supply</Span>
-            <Span className="text-[10px] font-normal uppercase tracking-wide text-zinc-400 sm:ml-auto">
-              Both companies
-            </Span>
-          </Summary>
-          <Stack gap="md" className="px-4 pb-4 pt-1 sm:px-5">
-            <Details className="rounded-lg bg-zinc-50/80 px-2 py-1">
-              <Summary className="cursor-pointer text-[11px] font-medium text-zinc-700 underline-offset-2 hover:underline [&::-webkit-details-marker]:hidden">
-                How this section is used
-              </Summary>
-              <Text className="mt-2 pb-2 text-[11px] leading-relaxed text-zinc-600">
-                GST %, reverse charge, other charges, and round-off apply to every invoice. Place of supply
-                usually follows the <Strong>selected company&apos;s</Strong> seller state on the invoice page;
-                these fields are a fallback. IGST vs CGST/SGST is inferred when bill-to state is filled.
-              </Text>
-            </Details>
-            <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm">
-              <Field>
-                <Label layout="inline">
-                  <MapPin className="h-3.5 w-3.5 text-zinc-400" aria-hidden />
-                  Place of supply (state)
-                </Label>
-                <Input {...register("invoiceTaxDefaults.placeOfSupplyState")} />
-                {errors.invoiceTaxDefaults?.placeOfSupplyState ? (
-                  <Text className="mt-1 text-xs text-red-600">
-                    {errors.invoiceTaxDefaults.placeOfSupplyState.message}
-                  </Text>
-                ) : null}
-              </Field>
-              <Field>
-                <Label layout="inline">
-                  <MapPin className="h-3.5 w-3.5 text-zinc-400" aria-hidden />
-                  Place of supply (code)
-                </Label>
-                <Input {...register("invoiceTaxDefaults.placeOfSupplyCode")} maxLength={2} />
-                {errors.invoiceTaxDefaults?.placeOfSupplyCode ? (
-                  <Text className="mt-1 text-xs text-red-600">
-                    {errors.invoiceTaxDefaults.placeOfSupplyCode.message}
-                  </Text>
-                ) : null}
-              </Field>
-              <Row className="items-center sm:col-span-2" gap="sm">
-                <Controller
-                  name="invoiceTaxDefaults.reverseCharge"
-                  control={control}
-                  render={({ field }) => (
-                    <Checkbox
-                      id="profile-rc"
-                      checked={field.value}
-                      onChange={(e) => field.onChange(e.target.checked)}
-                      onBlur={field.onBlur}
-                      ref={field.ref}
-                    />
-                  )}
-                />
-                <Label htmlFor="profile-rc" className="text-sm font-normal text-zinc-800">
-                  Reverse charge (default)
-                </Label>
-              </Row>
-              <Field>
-                <Label>Tax mode</Label>
-                <Controller
-                  name="invoiceTaxDefaults.taxMode"
-                  control={control}
-                  render={({ field }) => (
-                    <Select
-                      name={field.name}
-                      value={field.value}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                      ref={field.ref}
-                      invalid={!!errors.invoiceTaxDefaults?.taxMode}
-                    >
-                      <Option value="IGST">IGST</Option>
-                      <Option value="CGST_SGST">CGST + SGST</Option>
-                    </Select>
-                  )}
-                />
-              </Field>
-              <Field>
-                <Label>GST %</Label>
-                <Input type="number" step="0.01" {...register("invoiceTaxDefaults.gstPercent")} />
-                {errors.invoiceTaxDefaults?.gstPercent ? (
-                  <Text className="mt-1 text-xs text-red-600">
-                    {errors.invoiceTaxDefaults.gstPercent.message}
-                  </Text>
-                ) : null}
-              </Field>
-              <Field>
-                <Label>Default other charges (₹)</Label>
-                <Input type="number" step="any" {...register("invoiceTaxDefaults.extraCharges")} />
-              </Field>
-              <Field>
-                <Label>Label for other charges</Label>
-                <Input {...register("invoiceTaxDefaults.extraChargesLabel")} />
-              </Field>
-              <Field>
-                <Label>Default round off (₹)</Label>
-                <Input type="number" step="any" {...register("invoiceTaxDefaults.roundOff")} />
-              </Field>
-            </Grid>
-          </Stack>
-        </Details>
 
         <Row className="flex-col sm:flex-row sm:items-center sm:justify-between" gap="sm">
           <Button type="submit" variant="submit">

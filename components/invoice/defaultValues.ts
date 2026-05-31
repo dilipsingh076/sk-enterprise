@@ -1,26 +1,61 @@
+import {
+  DEFAULT_INVOICE_GST_PERCENT,
+  initialTaxFieldsFromSeller,
+} from "@/lib/invoice/billTaxDefaults";
+import { coerceIndianGstRate } from "@/lib/invoice/indianGstRates";
 import type { InvoiceFormInput, LineItem } from "@/lib/invoice/schema";
 import type { UserProfile } from "@/lib/invoice/userProfile";
 import {
   ensureUserProfileDefaults,
   getInvoiceNumberPrefixForCompanyId,
-  getSellerAlignedTaxDefaults,
   getSellerForCompanyId,
   resolveActiveCompanyId,
 } from "@/lib/profile/profileStorage";
 
-/** Ensures each line has discount fields (older saved drafts omit them). */
-export function normalizeLineItemsLine(row: LineItem): LineItem {
+/** Ensures each line has tax fields; line discounts are no longer used in the UI. */
+export function normalizeLineItemsLine(
+  row: LineItem,
+  defaultTaxPercent = DEFAULT_INVOICE_GST_PERCENT,
+): LineItem {
+  const tax =
+    row.taxPercent != null && Number.isFinite(Number(row.taxPercent))
+      ? coerceIndianGstRate(row.taxPercent, defaultTaxPercent)
+      : coerceIndianGstRate(defaultTaxPercent);
   return {
     ...row,
-    discountKind: row.discountKind === "PERCENT" ? "PERCENT" : "AMOUNT",
-    discount: row.discount ?? 0,
+    discountKind: "AMOUNT",
+    discount: 0,
+    taxPercent: tax,
   };
 }
 
+type LegacyInvoiceMeta = {
+  paymentTerms?: string;
+  freightPaymentTerms?: string;
+  insuranceTerms?: string;
+  machineSerialNo?: string;
+};
+
 export function normalizeLoadedInvoiceForm(data: InvoiceFormInput): InvoiceFormInput {
+  const gst = Number(data.gstPercent);
+  const defaultTax = Number.isFinite(gst) ? gst : DEFAULT_INVOICE_GST_PERCENT;
+  const legacy = data as InvoiceFormInput & LegacyInvoiceMeta;
+  const {
+    paymentTerms: legacyPaymentTerms,
+    freightPaymentTerms: _f,
+    insuranceTerms: _i,
+    machineSerialNo: _m,
+    ...rest
+  } = legacy;
+  void _f;
+  void _i;
+  void _m;
   return {
-    ...data,
-    lineItems: data.lineItems.map(normalizeLineItemsLine),
+    ...rest,
+    purchaserName: rest.purchaserName?.trim() || rest.billTo.name?.trim() || legacyPaymentTerms?.trim() || "",
+    billTo: { ...rest.billTo, pincode: rest.billTo.pincode ?? "" },
+    shipTo: rest.shipTo ? { ...rest.shipTo, pincode: rest.shipTo.pincode ?? "" } : rest.shipTo,
+    lineItems: rest.lineItems.map((row) => normalizeLineItemsLine(row, defaultTax)),
   };
 }
 
@@ -32,40 +67,38 @@ export function emptyBillTo(): InvoiceFormInput["billTo"] {
     gstin: "",
     pan: "",
     stateName: "",
-    stateCode: "01",
+    stateCode: "",
+    city: "",
+    pincode: "",
     mobile: "",
     kindAttn: "",
   };
 }
 
-/** Bill page initial state: profile seller + tax defaults, empty customer & lines. */
+/** Bill page initial state: company seller + tax from seller; customer & lines empty. */
 export function buildBillFormDefaults(
   profile: UserProfile,
   activeCompanyId: string | null | undefined,
 ): InvoiceFormInput {
   const p = ensureUserProfileDefaults(profile);
   const cid = resolveActiveCompanyId(p, activeCompanyId);
-  const t = getSellerAlignedTaxDefaults(p, cid);
+  const seller = getSellerForCompanyId(p, cid);
+  const tax = initialTaxFieldsFromSeller(seller);
   const today = new Date().toISOString().slice(0, 10);
   const prefix = getInvoiceNumberPrefixForCompanyId(p, cid);
   return {
-    seller: getSellerForCompanyId(p, cid),
+    seller,
     invoiceNumber: `${prefix}-`,
     invoiceDate: today,
-    placeOfSupplyState: t.placeOfSupplyState,
-    placeOfSupplyCode: t.placeOfSupplyCode,
-    reverseCharge: t.reverseCharge,
+    ...tax,
     eWayBill: "",
     vehicle: "",
     transport: "",
     poNumber: "",
     deliveryNote: "",
     destination: "",
-    paymentTerms: "",
-    freightPaymentTerms: "",
+    purchaserName: "",
     purchaseOrderDate: "",
-    machineSerialNo: "",
-    insuranceTerms: "",
     deliveryTermsLine: "",
     hypothecation: "",
     lrNumberAndDate: "",
@@ -74,11 +107,6 @@ export function buildBillFormDefaults(
     shipSameAsBill: true,
     shipTo: undefined,
     lineItems: [],
-    taxMode: t.taxMode,
-    gstPercent: t.gstPercent,
-    extraCharges: t.extraCharges ?? 0,
-    extraChargesLabel: t.extraChargesLabel ?? "Other charges",
-    roundOff: t.roundOff ?? 0,
     eInvoice: {
       irn: "",
       ackNumber: "",
@@ -88,54 +116,10 @@ export function buildBillFormDefaults(
   };
 }
 
-/**
- * After a successful PDF: keep profile-backed seller & tax defaults, clear this bill only.
- */
+/** After a successful PDF: keep seller, reset customer & lines; tax from seller again. */
 export function formStateForNextBill(
   profile: UserProfile,
   activeCompanyId: string | null | undefined,
 ): InvoiceFormInput {
-  const p = ensureUserProfileDefaults(profile);
-  const cid = resolveActiveCompanyId(p, activeCompanyId);
-  const t = getSellerAlignedTaxDefaults(p, cid);
-  const today = new Date().toISOString().slice(0, 10);
-  const prefix = getInvoiceNumberPrefixForCompanyId(p, cid);
-  return {
-    seller: getSellerForCompanyId(p, cid),
-    invoiceNumber: `${prefix}-`,
-    invoiceDate: today,
-    placeOfSupplyState: t.placeOfSupplyState,
-    placeOfSupplyCode: t.placeOfSupplyCode,
-    reverseCharge: t.reverseCharge,
-    eWayBill: "",
-    vehicle: "",
-    transport: "",
-    poNumber: "",
-    deliveryNote: "",
-    destination: "",
-    paymentTerms: "",
-    freightPaymentTerms: "",
-    purchaseOrderDate: "",
-    machineSerialNo: "",
-    insuranceTerms: "",
-    deliveryTermsLine: "",
-    hypothecation: "",
-    lrNumberAndDate: "",
-    otherMeta: "",
-    billTo: emptyBillTo(),
-    shipSameAsBill: true,
-    shipTo: undefined,
-    lineItems: [],
-    taxMode: t.taxMode,
-    gstPercent: t.gstPercent,
-    extraCharges: t.extraCharges ?? 0,
-    extraChargesLabel: t.extraChargesLabel ?? "Other charges",
-    roundOff: t.roundOff ?? 0,
-    eInvoice: {
-      irn: "",
-      ackNumber: "",
-      ackDate: "",
-      qrImageBase64: "",
-    },
-  };
+  return buildBillFormDefaults(profile, activeCompanyId);
 }

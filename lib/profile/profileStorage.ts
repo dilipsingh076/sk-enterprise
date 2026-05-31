@@ -1,10 +1,8 @@
 import { z } from "zod";
 import {
   companyPresetSchema,
-  invoiceTaxDefaultsSchema,
   userProfileSchema,
   type CompanyPreset,
-  type InvoiceTaxDefaults,
   type UserProfile,
 } from "@/lib/invoice/userProfile";
 import { sellerSchema, type Seller } from "@/lib/invoice/schema";
@@ -12,7 +10,6 @@ import { sellerSchema, type Seller } from "@/lib/invoice/schema";
 /** Legacy shape before two-company profiles */
 const legacyProfileSchema = z.object({
   seller: sellerSchema,
-  invoiceTaxDefaults: invoiceTaxDefaultsSchema,
 });
 
 const SK_SELLER: Seller = {
@@ -22,6 +19,8 @@ const SK_SELLER: Seller = {
   gstin: "05ACSPC4640C1ZZ",
   stateName: "Uttarakhand",
   stateCode: "05",
+  city: "Dehradun",
+  pincode: "248013",
   pan: "ACSPC4640C",
   mobile: "+91-9758428149",
   phone: "+91-9758428149",
@@ -52,6 +51,8 @@ const SECOND_SELLER: Seller = {
   gstin: "30AABCP1503H1Z7",
   stateName: "Maharashtra",
   stateCode: "27",
+  city: "",
+  pincode: "",
   pan: "",
   mobile: "",
   phone: "+91-22-00000000",
@@ -95,16 +96,6 @@ export const DEFAULT_USER_PROFILE: UserProfile = {
   companies: DEFAULT_COMPANIES,
   defaultCompanyId: "company-utk",
   recentBillTo: [],
-  invoiceTaxDefaults: {
-    placeOfSupplyState: "Uttarakhand",
-    placeOfSupplyCode: "05",
-    reverseCharge: false,
-    taxMode: "IGST",
-    gstPercent: 18,
-    extraCharges: 0,
-    extraChargesLabel: "Other charges",
-    roundOff: 0,
-  },
 };
 
 function migrateLegacyProfile(raw: unknown): UserProfile | null {
@@ -128,7 +119,6 @@ function migrateLegacyProfile(raw: unknown): UserProfile | null {
     ],
     defaultCompanyId: "company-utk",
     recentBillTo: [],
-    invoiceTaxDefaults: leg.data.invoiceTaxDefaults,
   };
 }
 
@@ -137,7 +127,6 @@ function tryCoerceSingleCompanyArray(raw: unknown): UserProfile | null {
     .object({
       companies: z.array(companyPresetSchema).min(1).max(1),
       defaultCompanyId: z.string(),
-      invoiceTaxDefaults: invoiceTaxDefaultsSchema,
     })
     .safeParse(raw);
   if (!row.success) return null;
@@ -146,7 +135,6 @@ function tryCoerceSingleCompanyArray(raw: unknown): UserProfile | null {
     companies: [only, DEFAULT_COMPANIES[1]],
     defaultCompanyId: row.data.defaultCompanyId || only.id,
     recentBillTo: [],
-    invoiceTaxDefaults: row.data.invoiceTaxDefaults,
   };
 }
 
@@ -172,13 +160,18 @@ export function getInvoiceNumberPrefixForCompanyId(profile: UserProfile, company
 }
 
 /** Fill `recentBillTo`, `invoiceNumberPrefix`, and other defaults for older stored JSON. */
+function partyWithPincode<T extends { pincode?: string }>(party: T): T & { pincode: string } {
+  return { ...party, pincode: party.pincode ?? "" };
+}
+
 export function ensureUserProfileDefaults(profile: UserProfile): UserProfile {
   return {
     ...profile,
-    recentBillTo: profile.recentBillTo ?? [],
+    recentBillTo: (profile.recentBillTo ?? []).map(partyWithPincode),
     companies: profile.companies.map((c) => ({
       ...c,
       invoiceNumberPrefix: getInvoiceNumberPrefix(c),
+      seller: partyWithPincode(c.seller),
     })) as UserProfile["companies"],
   };
 }
@@ -202,25 +195,6 @@ export function normalizeStoredUserProfile(raw: unknown): UserProfile {
 export function getSellerForCompanyId(profile: UserProfile, companyId: string): Seller {
   const hit = profile.companies.find((c) => c.id === companyId);
   return hit?.seller ?? profile.companies[0].seller;
-}
-
-/**
- * Profile “Default tax” values with place of supply aligned to the selected company’s
- * seller state (so switching issuer updates PoS with company details).
- */
-export function getSellerAlignedTaxDefaults(
-  profile: UserProfile,
-  companyId: string,
-): InvoiceTaxDefaults {
-  const base = profile.invoiceTaxDefaults;
-  const seller = getSellerForCompanyId(profile, companyId);
-  const sn = seller.stateName?.trim();
-  const sc = seller.stateCode?.trim();
-  return {
-    ...base,
-    placeOfSupplyState: sn && sn.length > 0 ? sn : base.placeOfSupplyState,
-    placeOfSupplyCode: sc && /^[0-9]{2}$/.test(sc) ? sc : base.placeOfSupplyCode,
-  };
 }
 
 export function resolveActiveCompanyId(

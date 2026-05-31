@@ -23,6 +23,13 @@ import {
 } from "react-hook-form";
 import { computeInvoiceTotals } from "@/lib/invoice/calculations";
 import { fetchInvoicePdf } from "@/lib/invoice/fetchInvoicePdf";
+import {
+  billToAlignedWithGstin,
+  prepareInvoicePayload,
+  syncInvoiceTaxFields,
+} from "@/lib/invoice/billTaxDefaults";
+import { stateNameFromGstCode } from "@/lib/invoice/indianStates";
+import { stateCodeFromGstin } from "@/lib/invoice/gstin";
 import { invoiceSchema, type InvoiceFormInput, type Party } from "@/lib/invoice/schema";
 import { applyProfileToInvoice } from "@/lib/profile/applyProfileToInvoice";
 import type { UserProfile } from "@/lib/invoice/userProfile";
@@ -328,16 +335,14 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
   const invoiceNumberWatch = useWatch({ control, name: "invoiceNumber" });
 
   const lineItemsWatch = useWatch({ control, name: "lineItems" });
+  const billToWatch = useWatch({ control, name: "billTo" });
   const [
     taxModeWatch,
     gstPercentWatch,
     extraChargesWatch,
-    roundOffWatch,
     sellerWatch,
     posStateWatch,
     posCodeWatch,
-    reverseWatch,
-    extraLabelWatch,
     shipSame,
   ] = useWatch({
     control,
@@ -345,12 +350,9 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
       "taxMode",
       "gstPercent",
       "extraCharges",
-      "roundOff",
       "seller",
       "placeOfSupplyState",
       "placeOfSupplyCode",
-      "reverseCharge",
-      "extraChargesLabel",
       "shipSameAsBill",
     ],
   });
@@ -363,7 +365,6 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
         taxModeWatch ?? "IGST",
         Number(gstPercentWatch) || 0,
         Number(extraChargesWatch) || 0,
-        Number(roundOffWatch) || 0,
       );
     } catch {
       return null;
@@ -373,7 +374,6 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
     taxModeWatch,
     gstPercentWatch,
     extraChargesWatch,
-    roundOffWatch,
   ]);
 
   const recentBillTo = useMemo(() => {
@@ -383,15 +383,60 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
 
   const applyRecentBillTo = useCallback(
     (party: Party) => {
-      setValue("billTo", party, { shouldValidate: true, shouldDirty: true });
+      const aligned = billToAlignedWithGstin(party);
+      setValue("billTo", aligned, { shouldValidate: true, shouldDirty: true });
+      setValue("purchaserName", aligned.name, { shouldDirty: true });
       void trigger("billTo");
       scrollToInvoiceSection(INVOICE_SECTION.billTo);
       requestAnimationFrame(() => {
-        document.getElementById("billto-name-field")?.focus();
+        document.getElementById("billto-purchaser-field")?.focus();
       });
     },
     [setValue, trigger],
   );
+
+  /** PoS + IGST/CGST from bill-to GSTIN / state (not stale state name). */
+  useEffect(() => {
+    if (!ready) return;
+
+    const cur = getValues();
+    const alignedBillTo = billToAlignedWithGstin(cur.billTo);
+    const gstState = stateCodeFromGstin(alignedBillTo.gstin);
+
+    if (gstState) {
+      if (cur.billTo.stateCode !== alignedBillTo.stateCode) {
+        setValue("billTo.stateCode", alignedBillTo.stateCode, { shouldDirty: true });
+      }
+      const expectedName = stateNameFromGstCode(gstState);
+      if (expectedName && cur.billTo.stateName !== expectedName) {
+        setValue("billTo.stateName", expectedName, { shouldDirty: true });
+      }
+    }
+
+    const synced = syncInvoiceTaxFields({
+      ...cur,
+      billTo: alignedBillTo,
+    });
+
+    if (synced.placeOfSupplyCode !== cur.placeOfSupplyCode) {
+      setValue("placeOfSupplyCode", synced.placeOfSupplyCode, { shouldDirty: true });
+    }
+    if (synced.placeOfSupplyState !== cur.placeOfSupplyState) {
+      setValue("placeOfSupplyState", synced.placeOfSupplyState, { shouldDirty: true });
+    }
+    if (synced.taxMode !== cur.taxMode) {
+      setValue("taxMode", synced.taxMode, { shouldDirty: true });
+    }
+  }, [
+    ready,
+    sellerWatch,
+    billToWatch,
+    billToWatch?.gstin,
+    billToWatch?.stateCode,
+    billToWatch?.stateName,
+    setValue,
+    getValues,
+  ]);
 
   useEffect(() => {
     if (didInit.current) return;
@@ -470,7 +515,7 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
         setDraftNotice("saving");
         void (async () => {
           try {
-            await saveDraft(r.data);
+            await saveDraft(prepareInvoicePayload(r.data));
             setDraftNotice("saved");
             setTimeout(() => setDraftNotice("idle"), 2200);
           } catch {
@@ -641,7 +686,7 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
 
   const onPreview = handleSubmit(
     async (data) => {
-      const payload = reconcileInvoiceNumber(data);
+      const payload = prepareInvoicePayload(reconcileInvoiceNumber(data));
       setPreviewError(null);
       setSubmitError(null);
       setPreviewLoading(true);
@@ -671,7 +716,7 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
   const onUpdateSavedBill = handleSubmit(
     async (data) => {
       if (!editBillId || !workspace) return;
-      const payload = reconcileInvoiceNumber(data);
+      const payload = prepareInvoicePayload(reconcileInvoiceNumber(data));
       setUpdateLoading(true);
       setSubmitError(null);
       try {
@@ -706,7 +751,7 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
   const onSubmit = handleSubmit(
     async (data) => {
       if (!workspace) return;
-      const payload = reconcileInvoiceNumber(data);
+      const payload = prepareInvoicePayload(reconcileInvoiceNumber(data));
       setSubmitError(null);
       setSuccessMsg(null);
       setLoading(true);
@@ -932,18 +977,11 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
                     <Text className="mt-1 text-xs text-red-600">{errors.invoiceDate.message}</Text>
                   ) : null}
                 </Field>
-                <Field>
-                  <Label className={fieldLabelClass}>Purchase order no.</Label>
-                  <Input {...register("poNumber")} placeholder="e.g. PO-2025-0142" autoComplete="off" />
-                  {errors.poNumber ? (
-                    <Text className="mt-1 text-xs text-red-600">{errors.poNumber.message}</Text>
-                  ) : null}
-                </Field>
-                <Field>
-                  <Label className={fieldLabelClass}>Purchase order date</Label>
-                  <Input type="date" {...register("purchaseOrderDate")} />
-                  {errors.purchaseOrderDate ? (
-                    <Text className="mt-1 text-xs text-red-600">{errors.purchaseOrderDate.message}</Text>
+                <Field className="sm:col-span-2">
+                  <Label className={fieldLabelClass}>Delivery terms</Label>
+                  <Input {...register("deliveryTermsLine")} autoComplete="off" placeholder="As on PDF header" />
+                  {errors.deliveryTermsLine ? (
+                    <Text className="mt-1 text-xs text-red-600">{errors.deliveryTermsLine.message}</Text>
                   ) : null}
                 </Field>
               </Grid>
@@ -988,43 +1026,6 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
               <Text muted>Loading…</Text>
             )}
           </ReadOnlyBlock>
-
-          <Box className="min-w-0 lg:col-span-2">
-            <ReadOnlyBlock id={INVOICE_SECTION.tax} title="Tax & place of supply">
-              <Dl className="flex flex-wrap gap-x-4 gap-y-2 text-sm sm:gap-x-5">
-                <Box className="w-full min-w-[8rem] sm:w-auto">
-                  <Dt className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Place of supply</Dt>
-                  <Dd className="mt-0.5 font-medium text-zinc-900">
-                    {posStateWatch} ({posCodeWatch})
-                  </Dd>
-                </Box>
-                <Box>
-                  <Dt className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Tax</Dt>
-                  <Dd className="mt-0.5">{taxModeWatch === "CGST_SGST" ? "CGST + SGST" : "IGST"}</Dd>
-                </Box>
-                <Box>
-                  <Dt className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">GST %</Dt>
-                  <Dd className="mt-0.5 tabular-nums">{gstPercentWatch}</Dd>
-                </Box>
-                <Box>
-                  <Dt className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Rev. charge</Dt>
-                  <Dd className="mt-0.5">{reverseWatch ? "Yes" : "No"}</Dd>
-                </Box>
-                <Box>
-                  <Dt className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Other (₹)</Dt>
-                  <Dd className="mt-0.5 tabular-nums">{Number(extraChargesWatch) || 0}</Dd>
-                </Box>
-                <Box className="min-w-0 w-[min(100%,12rem)] shrink-0">
-                  <Dt className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Other label</Dt>
-                  <Dd className="mt-0.5 truncate">{extraLabelWatch || "—"}</Dd>
-                </Box>
-                <Box>
-                  <Dt className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Round off</Dt>
-                  <Dd className="mt-0.5 tabular-nums">{Number(roundOffWatch) || 0}</Dd>
-                </Box>
-              </Dl>
-            </ReadOnlyBlock>
-          </Box>
         </Grid>
 
         {editBillId ? (
@@ -1035,60 +1036,202 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
           </Banner>
         ) : null}
 
-        <FormSection id="section-billto" title="Bill to" dense leading={<User aria-hidden />}>
-          <Grid columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" gap="sm">
-            <Field className="sm:col-span-2 lg:col-span-4">
-              <Label className={fieldLabelClass}>Name</Label>
-              <Input id="billto-name-field" {...register("billTo.name")} />
-              {errors.billTo?.name ? (
-                <Text className="mt-1 text-xs text-red-600">{errors.billTo.name.message}</Text>
-              ) : null}
-            </Field>
-            <Field className="sm:col-span-2 lg:col-span-4">
-              <Label className={fieldLabelClass}>Address</Label>
-              <TextArea rows={2} {...register("billTo.address")} />
-              {errors.billTo?.address ? (
-                <Text className="mt-1 text-xs text-red-600">{errors.billTo.address.message}</Text>
-              ) : null}
-            </Field>
-            <Field className="lg:col-span-2">
-              <Label className={fieldLabelClass}>GSTIN</Label>
-              <Input {...register("billTo.gstin")} maxLength={15} inputMode="text" autoCapitalize="characters" />
-              {errors.billTo?.gstin ? (
-                <Text className="mt-1 text-xs text-red-600">{errors.billTo.gstin.message}</Text>
-              ) : null}
-              <Text caption className="mt-1 text-[10px] leading-snug text-zinc-500">
-                15-character GSTIN (state code + PAN entity + checksum). Wrong GSTIN breaks e-invoice matching.
-              </Text>
-            </Field>
-            <Field className="lg:col-span-2">
-              <Label className={fieldLabelClass}>PAN (optional)</Label>
-              <Input {...register("billTo.pan")} maxLength={10} />
-              {errors.billTo?.pan ? (
-                <Text className="mt-1 text-xs text-red-600">{errors.billTo.pan.message}</Text>
-              ) : null}
-            </Field>
-            <Field className="lg:col-span-2">
-              <Label className={fieldLabelClass}>State</Label>
-              <Input {...register("billTo.stateName")} />
-              {errors.billTo?.stateName ? (
-                <Text className="mt-1 text-xs text-red-600">{errors.billTo.stateName.message}</Text>
-              ) : null}
-            </Field>
-            <Field className="lg:col-span-2">
-              <Label className={fieldLabelClass}>State code</Label>
-              <Input {...register("billTo.stateCode")} maxLength={2} />
-              {errors.billTo?.stateCode ? (
-                <Text className="mt-1 text-xs text-red-600">{errors.billTo.stateCode.message}</Text>
-              ) : null}
-            </Field>
-            <Field className="sm:col-span-1 lg:col-span-2">
-              <Label className={fieldLabelClass}>Mobile (optional)</Label>
-              <Input {...register("billTo.mobile")} />
-            </Field>
-            <Field className="sm:col-span-1 lg:col-span-2">
+        <FormSection
+          id="section-billto"
+          title="Bill to / Purchaser"
+          dense
+          leading={<User aria-hidden />}
+        >
+          <Text caption className="mb-4 text-[11px] leading-snug text-zinc-600">
+            Buyer for the PDF header and the &quot;Billed to&quot; block. Pick a saved customer from the panel on the
+            right, or enter details below.
+          </Text>
+
+          <Box className="mb-4">
+            <Text className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+              Purchaser &amp; purchase order
+            </Text>
+            <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm">
+              <Field>
+                <Label className={fieldLabelClass}>Purchaser name</Label>
+                <Input
+                  id="billto-purchaser-field"
+                  {...register("purchaserName")}
+                  autoComplete="off"
+                  placeholder="Shown as Purchaser Name on PDF"
+                />
+                {errors.purchaserName ? (
+                  <Text className="mt-1 text-xs text-red-600">{errors.purchaserName.message}</Text>
+                ) : null}
+              </Field>
+              <Field>
+                <Label className={fieldLabelClass}>Mobile (optional)</Label>
+                <Input {...register("billTo.mobile")} inputMode="tel" autoComplete="tel" />
+              </Field>
+              <Field>
+                <Label className={fieldLabelClass}>Purchase order no.</Label>
+                <Input {...register("poNumber")} placeholder="e.g. PO-2025-0142" autoComplete="off" />
+                {errors.poNumber ? (
+                  <Text className="mt-1 text-xs text-red-600">{errors.poNumber.message}</Text>
+                ) : null}
+              </Field>
+              <Field>
+                <Label className={fieldLabelClass}>Purchase order date</Label>
+                <Input type="date" {...register("purchaseOrderDate")} />
+                {errors.purchaseOrderDate ? (
+                  <Text className="mt-1 text-xs text-red-600">{errors.purchaseOrderDate.message}</Text>
+                ) : null}
+              </Field>
+            </Grid>
+            <Text caption className="mt-2 text-[10px] leading-snug text-zinc-500">
+              If purchaser name is blank, the billed-to name below is used on the PDF.
+            </Text>
+          </Box>
+
+          <Box className="mb-4 border-t border-zinc-100 pt-4">
+            <Text className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+              Billed to — name &amp; address
+            </Text>
+            <Grid columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" gap="sm">
+              <Field className="sm:col-span-2 lg:col-span-4">
+                <Label className={fieldLabelClass}>Billed to company name</Label>
+                <Input id="billto-name-field" {...register("billTo.name")} />
+                {errors.billTo?.name ? (
+                  <Text className="mt-1 text-xs text-red-600">{errors.billTo.name.message}</Text>
+                ) : null}
+              </Field>
+              <Field className="sm:col-span-2 lg:col-span-4">
+                <Label className={fieldLabelClass}>Address</Label>
+                <TextArea rows={2} {...register("billTo.address")} />
+                {errors.billTo?.address ? (
+                  <Text className="mt-1 text-xs text-red-600">{errors.billTo.address.message}</Text>
+                ) : null}
+              </Field>
+              <Field className="sm:col-span-1 lg:col-span-2">
+                <Label className={fieldLabelClass}>Pincode</Label>
+                <Input
+                  {...register("billTo.pincode")}
+                  maxLength={6}
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  placeholder="e.g. 248013"
+                />
+                {errors.billTo?.pincode ? (
+                  <Text className="mt-1 text-xs text-red-600">{errors.billTo.pincode.message}</Text>
+                ) : null}
+              </Field>
+              <Field className="sm:col-span-1 lg:col-span-2">
+                <Label className={fieldLabelClass}>City (optional)</Label>
+                <Input {...register("billTo.city")} autoComplete="address-level2" />
+              </Field>
+            </Grid>
+          </Box>
+
+          <Box className="mb-4 border-t border-zinc-100 pt-4">
+            <Text className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+              GST &amp; state
+            </Text>
+            <Grid columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" gap="sm">
+              <Field className="lg:col-span-2">
+                <Label className={fieldLabelClass}>GSTIN</Label>
+                <Input {...register("billTo.gstin")} maxLength={15} inputMode="text" autoCapitalize="characters" />
+                {errors.billTo?.gstin ? (
+                  <Text className="mt-1 text-xs text-red-600">{errors.billTo.gstin.message}</Text>
+                ) : null}
+                <Text caption className="mt-1 text-[10px] leading-snug text-zinc-500">
+                  15 characters with valid checksum; state code updates from the first two digits.
+                </Text>
+              </Field>
+              <Field className="lg:col-span-2">
+                <Label className={fieldLabelClass}>PAN (optional)</Label>
+                <Input {...register("billTo.pan")} maxLength={10} autoCapitalize="characters" />
+                {errors.billTo?.pan ? (
+                  <Text className="mt-1 text-xs text-red-600">{errors.billTo.pan.message}</Text>
+                ) : null}
+                <Text caption className="mt-1 text-[10px] leading-snug text-zinc-500">
+                  Shown under purchaser name on the PDF when provided.
+                </Text>
+              </Field>
+              <Field className="lg:col-span-2">
+                <Label className={fieldLabelClass}>State</Label>
+                <Input {...register("billTo.stateName")} />
+                {errors.billTo?.stateName ? (
+                  <Text className="mt-1 text-xs text-red-600">{errors.billTo.stateName.message}</Text>
+                ) : null}
+              </Field>
+              <Field className="lg:col-span-2">
+                <Label className={fieldLabelClass}>State code</Label>
+                <Input {...register("billTo.stateCode")} maxLength={2} inputMode="numeric" />
+                {errors.billTo?.stateCode ? (
+                  <Text className="mt-1 text-xs text-red-600">{errors.billTo.stateCode.message}</Text>
+                ) : null}
+              </Field>
+            </Grid>
+          </Box>
+
+          <Box className="border-t border-zinc-100 pt-4">
+            <Field className="max-w-md">
               <Label className={fieldLabelClass}>Kind attention (optional)</Label>
               <Input {...register("billTo.kindAttn")} />
+            </Field>
+          </Box>
+        </FormSection>
+
+        <FormSection id={INVOICE_SECTION.tax} title="Tax & place of supply" dense>
+          <Text caption className="mb-3 text-[11px] leading-snug text-zinc-600">
+            Place of supply and IGST/CGST are derived from seller and bill-to. Set tax % on each line item; adjust
+            reverse charge and other charges below. Grand total is rounded to the nearest rupee automatically.
+          </Text>
+          <Dl className="mb-4 flex flex-wrap gap-x-4 gap-y-2 rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2 text-sm sm:gap-x-5">
+            <Box className="w-full min-w-[8rem] sm:w-auto">
+              <Dt className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Place of supply</Dt>
+              <Dd className="mt-0.5 font-medium text-zinc-900">
+                {posStateWatch} ({posCodeWatch})
+              </Dd>
+            </Box>
+            <Box>
+              <Dt className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Tax</Dt>
+              <Dd className="mt-0.5">
+                {taxModeWatch === "CGST_SGST" ? "CGST + SGST" : "IGST"}
+              </Dd>
+            </Box>
+          </Dl>
+          <Grid columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" gap="sm">
+            <Field className="flex flex-col justify-end sm:col-span-2 lg:col-span-1">
+              <Row className="mb-2 items-center" gap="sm">
+                <Controller
+                  name="reverseCharge"
+                  control={control}
+                  render={({ field }) => (
+                    <Checkbox
+                      id="reverse-charge"
+                      checked={field.value}
+                      onChange={(e) => field.onChange(e.target.checked)}
+                      onBlur={field.onBlur}
+                      ref={field.ref}
+                    />
+                  )}
+                />
+                <Label htmlFor="reverse-charge" className="text-sm font-normal text-zinc-800">
+                  Reverse charge (PDF: YES/NO)
+                </Label>
+              </Row>
+            </Field>
+            <Field>
+              <Label className={fieldLabelClass}>Other charges (₹)</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                {...register("extraCharges", { valueAsNumber: true })}
+              />
+              {errors.extraCharges ? (
+                <Text className="mt-1 text-xs text-red-600">{errors.extraCharges.message}</Text>
+              ) : null}
+            </Field>
+            <Field>
+              <Label className={fieldLabelClass}>Other charges label</Label>
+              <Input {...register("extraChargesLabel")} placeholder="Other charges" />
             </Field>
           </Grid>
         </FormSection>
@@ -1130,6 +1273,23 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
                 </Text>
               </Field>
               <Field>
+                <Label className={fieldLabelClass}>Pincode</Label>
+                <Input
+                  {...register("shipTo.pincode")}
+                  maxLength={6}
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  placeholder="e.g. 400001"
+                />
+                {errors.shipTo?.pincode ? (
+                  <Text className="mt-1 text-xs text-red-600">{errors.shipTo.pincode.message}</Text>
+                ) : null}
+              </Field>
+              <Field>
+                <Label className={fieldLabelClass}>City (optional)</Label>
+                <Input {...register("shipTo.city")} autoComplete="address-level2" />
+              </Field>
+              <Field>
                 <Label className={fieldLabelClass}>State</Label>
                 <Input {...register("shipTo.stateName")} />
               </Field>
@@ -1142,6 +1302,79 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
               ) : null}
             </Grid>
           ) : null}
+        </FormSection>
+
+        <FormSection
+          id={INVOICE_SECTION.transport}
+          title="Transport & other (PDF header)"
+          dense
+          leading={<Truck aria-hidden />}
+        >
+          <Text caption className="mb-3 text-[11px] leading-snug text-zinc-600">
+            These appear in the top block of the downloaded PDF (transporter, waybill, others, hypothecation).
+          </Text>
+          <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm">
+            <Field>
+              <Label className={fieldLabelClass}>Name of transporter</Label>
+              <Input {...register("transport")} autoComplete="off" />
+            </Field>
+            <Field>
+              <Label className={fieldLabelClass}>L.R. no. &amp; date</Label>
+              <Input {...register("lrNumberAndDate")} autoComplete="off" placeholder="e.g. LR-102 / 2025-05-01" />
+            </Field>
+            <Field>
+              <Label className={fieldLabelClass}>Vehicle no.</Label>
+              <Input {...register("vehicle")} autoComplete="off" />
+            </Field>
+            <Field>
+              <Label className={fieldLabelClass}>Way bill no.</Label>
+              <Input {...register("eWayBill")} autoComplete="off" />
+            </Field>
+            <Field>
+              <Label className={fieldLabelClass}>Destination (optional)</Label>
+              <Input {...register("destination")} autoComplete="off" />
+            </Field>
+            <Field>
+              <Label className={fieldLabelClass}>Others</Label>
+              <Input {...register("otherMeta")} autoComplete="off" placeholder="Shown as “Others” on PDF" />
+              <Text caption className="mt-1 text-[10px] leading-snug text-zinc-500">
+                If blank, destination is used on the PDF.
+              </Text>
+            </Field>
+            <Field className="sm:col-span-2">
+              <Label className={fieldLabelClass}>Delivery note (optional)</Label>
+              <Input {...register("deliveryNote")} autoComplete="off" />
+            </Field>
+            <Field className="sm:col-span-2">
+              <Label className={fieldLabelClass}>Hypothecation</Label>
+              <Input {...register("hypothecation")} autoComplete="off" placeholder="Shown below bill-to on PDF" />
+            </Field>
+          </Grid>
+        </FormSection>
+
+        <FormSection
+          id={INVOICE_SECTION.einvoice}
+          title="E-invoice (PDF header)"
+          dense
+          leading={<FileText aria-hidden />}
+        >
+          <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm">
+            <Field className="sm:col-span-2">
+              <Label className={fieldLabelClass}>IRN</Label>
+              <Input {...register("eInvoice.irn")} autoComplete="off" />
+              {errors.eInvoice?.irn ? (
+                <Text className="mt-1 text-xs text-red-600">{errors.eInvoice.irn.message}</Text>
+              ) : null}
+            </Field>
+            <Field>
+              <Label className={fieldLabelClass}>Ack no.</Label>
+              <Input {...register("eInvoice.ackNumber")} autoComplete="off" />
+            </Field>
+            <Field>
+              <Label className={fieldLabelClass}>Ack date</Label>
+              <Input {...register("eInvoice.ackDate")} autoComplete="off" placeholder="YYYY-MM-DD" />
+            </Field>
+          </Grid>
         </FormSection>
 
         <FormSection id="section-lines" title="Line items" dense leading={<ListOrdered aria-hidden />}>

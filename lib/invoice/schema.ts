@@ -1,7 +1,11 @@
 import { z } from "zod";
-
-/** 15-char GSTIN (standard India format) */
-const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+import { clampPercent } from "@/lib/invoice/calculations";
+import { coerceIndianGstRate } from "@/lib/invoice/indianGstRates";
+import {
+  GSTIN_FORMAT_REGEX,
+  gstinChecksumError,
+  isValidGstinChecksum,
+} from "@/lib/invoice/gstin";
 
 const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 
@@ -37,12 +41,22 @@ export const partySchema = z.object({
   gstin: z
     .string()
     .transform((s) => s.trim().toUpperCase())
-    .pipe(
-      z
-        .string()
-        .length(15, "GSTIN must be 15 characters")
-        .regex(gstinRegex, "Invalid GSTIN format"),
-    ),
+    .superRefine((g, ctx) => {
+      if (g.length !== 15) {
+        ctx.addIssue({ code: "custom", message: "GSTIN must be 15 characters" });
+        return;
+      }
+      if (!GSTIN_FORMAT_REGEX.test(g)) {
+        ctx.addIssue({ code: "custom", message: "Invalid GSTIN format" });
+        return;
+      }
+      if (!isValidGstinChecksum(g)) {
+        ctx.addIssue({
+          code: "custom",
+          message: gstinChecksumError(g) ?? "Invalid GSTIN checksum",
+        });
+      }
+    }),
   stateName: z
     .string()
     .min(1, "Required")
@@ -52,6 +66,19 @@ export const partySchema = z.object({
     .string()
     .length(2, "State code must be 2 digits")
     .regex(/^[0-9]{2}$/),
+  city: z
+    .string()
+    .optional()
+    .transform((s) => {
+      if (s == null) return undefined;
+      const t = s.trim();
+      return t === "" ? undefined : t;
+    }),
+  pincode: z
+    .string()
+    .min(1, "Required")
+    .transform(trimStr)
+    .pipe(z.string().regex(/^[0-9]{6}$/, "Pincode must be 6 digits")),
   mobile: z.string().optional(),
   kindAttn: z.string().optional(),
 });
@@ -113,16 +140,31 @@ const lineItemBaseSchema = z.object({
   rate: z.coerce.number().nonnegative("Rate must be ≥ 0"),
   discountKind: lineItemDiscountKindSchema.default("AMOUNT"),
   discount: z.coerce.number().nonnegative("Discount must be ≥ 0").default(0),
+  /** GST % for this line (tax on qty × rate) — standard Indian slabs only. */
+  taxPercent: z.preprocess(
+    (val) => {
+      if (val === undefined || val === null || val === "") return undefined;
+      return coerceIndianGstRate(val);
+    },
+    z.number().max(100, "Tax % cannot exceed 100").optional(),
+  ),
 });
 
 export const lineItemSchema = lineItemBaseSchema.superRefine((line, ctx) => {
   const gross = Math.round(line.quantity * line.rate * 100) / 100;
   const d = line.discount ?? 0;
   if (line.discountKind === "PERCENT") {
-    if (d > 100) {
+    if (d > 100 + 0.0001) {
       ctx.addIssue({
         code: "custom",
         message: "Discount % cannot exceed 100",
+        path: ["discount"],
+      });
+    }
+    if (d < 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Discount % must be ≥ 0",
         path: ["discount"],
       });
     }
@@ -177,11 +219,8 @@ export const invoiceSchema = z
     poNumber: z.string().optional(),
     deliveryNote: z.string().optional(),
     destination: z.string().optional(),
-    paymentTerms: z.string().optional(),
-    freightPaymentTerms: z.string().optional(),
+    purchaserName: z.string().optional(),
     purchaseOrderDate: z.string().optional(),
-    machineSerialNo: z.string().optional(),
-    insuranceTerms: z.string().optional(),
     deliveryTermsLine: z.string().optional(),
     hypothecation: z.string().optional(),
     lrNumberAndDate: z.string().optional(),

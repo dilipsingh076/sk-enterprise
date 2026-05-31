@@ -28,46 +28,83 @@ import {
   Tr,
 } from "@/components/ui";
 import { cn } from "@/components/ui/cn";
+import {
+  lineGross,
+  lineTaxAmount,
+  lineTaxPercent,
+  lineTaxableValue,
+} from "@/lib/invoice/calculations";
+import {
+  coerceIndianGstRate,
+  gstRateSelectValue,
+  INDIAN_GST_RATE_OPTIONS,
+} from "@/lib/invoice/indianGstRates";
 import { getLineItemUnitOptions } from "@/lib/invoice/lineItemUnits";
-import type { InvoiceFormInput } from "@/lib/invoice/schema";
+import type { InvoiceFormInput, LineItem } from "@/lib/invoice/schema";
 
-function previewLineTaxable(line: {
-  quantity?: unknown;
-  rate?: unknown;
-  discountKind?: unknown;
-  discount?: unknown;
-}): number {
-  const qty = Number(line?.quantity) || 0;
-  const rate = Number(line?.rate) || 0;
-  const kind = line?.discountKind === "PERCENT" ? "PERCENT" : "AMOUNT";
-  const disc = Number(line?.discount) || 0;
-  const gross = Math.round(qty * rate * 100) / 100;
-  const dr =
-    kind === "PERCENT"
-      ? Math.min(gross, Math.round((gross * (disc / 100)) * 100) / 100)
-      : Math.min(gross, Math.round(disc * 100) / 100);
-  return Math.max(0, Math.round((gross - dr) * 100) / 100);
+function formatAmt(n: number) {
+  return n.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
-const cellControlClass =
-  "mt-0 border-zinc-300 bg-white px-2 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 " +
-  "rounded-md border shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400";
+const numField = {
+  valueAsNumber: true,
+  setValueAs: (v: string | number) => {
+    if (v === "" || v == null) return 0;
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? n : 0;
+  },
+} as const;
 
-const stickyTh = "sticky z-20 border-r border-zinc-200 bg-zinc-100 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]";
-const stickyTdOdd = "sticky z-10 border-r border-zinc-100 bg-white/95 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.04)]";
-const stickyTdEven = "sticky z-10 border-r border-zinc-100 bg-zinc-50/95 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.04)]";
+const cellInput =
+  "mt-0 box-border w-full min-w-0 border border-zinc-300 bg-white px-1.5 py-1 text-xs text-zinc-900 " +
+  "placeholder:text-zinc-400 rounded shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400";
+
+const numInput = cn(
+  cellInput,
+  "text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+);
+
+const thBase =
+  "border-b border-zinc-200 px-1.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-800";
+const tdBase = "border-b border-zinc-100 px-1.5 py-1.5 align-middle";
+const stickyTh = "sticky z-20 bg-zinc-100 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]";
+const stickyTd = "sticky z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.04)]";
 
 const iconActionClass =
-  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border p-0 shadow-sm transition-colors disabled:pointer-events-none disabled:opacity-40";
+  "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border p-0 shadow-sm transition-colors disabled:pointer-events-none disabled:opacity-40";
+
+const amtCellClass =
+  "whitespace-nowrap px-1.5 py-1.5 text-right align-middle text-[11px] font-medium tabular-nums text-zinc-950";
+
+function CellError({ message }: { message?: string }) {
+  if (!message) return null;
+  return (
+    <Text className="mt-0.5 truncate text-[9px] leading-tight text-red-600" title={message}>
+      {message}
+    </Text>
+  );
+}
 
 type LineItemRowProps = {
   index: number;
   lineCount: number;
+  invoiceGstPercent: number;
+  taxMode: "IGST" | "CGST_SGST";
   remove: UseFieldArrayRemove;
   onDuplicate: (index: number) => void;
 };
 
-const LineItemRow = memo(function LineItemRow({ index, lineCount, remove, onDuplicate }: LineItemRowProps) {
+const LineItemRow = memo(function LineItemRow({
+  index,
+  lineCount,
+  invoiceGstPercent,
+  taxMode,
+  remove,
+  onDuplicate,
+}: LineItemRowProps) {
   const {
     control,
     register,
@@ -75,56 +112,56 @@ const LineItemRow = memo(function LineItemRow({ index, lineCount, remove, onDupl
   } = useFormContext<InvoiceFormInput>();
 
   const line = useWatch({ control, name: `lineItems.${index}` });
-  const amt = useMemo(() => previewLineTaxable(line ?? {}), [line]);
-  const isPercent = line?.discountKind === "PERCENT";
+  const amounts = useMemo(() => {
+    const item = (line ?? {}) as LineItem;
+    const gross = lineGross(item);
+    const taxable = lineTaxableValue(item);
+    const pct = lineTaxPercent(item, invoiceGstPercent);
+    const tax = lineTaxAmount(taxable, taxMode, pct);
+    const total = Math.round((taxable + tax) * 100) / 100;
+    return { gross, tax, total };
+  }, [line, taxMode, invoiceGstPercent]);
+
   const rowErrors = errors.lineItems?.[index];
   const zebra = index % 2 === 1;
-  const stickyBg = zebra ? stickyTdEven : stickyTdOdd;
+  const rowBg = zebra ? "bg-zinc-50/90" : "bg-white";
+  const stickyCellBg = zebra ? "bg-zinc-50/98" : "bg-white/98";
 
   return (
-    <Tr className={zebra ? "bg-zinc-50/80" : ""}>
-      <Td
-        className={cn(
-          "px-2 py-1.5 text-center text-xs font-medium tabular-nums text-zinc-700",
-          stickyBg,
-          "left-0 min-w-[2.5rem]",
-        )}
-      >
-        {index + 1}
+    <Tr className={rowBg}>
+      <Td className={cn(tdBase, stickyTd, stickyCellBg, "left-0 text-center")}>
+        <Span className="text-[10px] font-medium tabular-nums text-zinc-600">{index + 1}</Span>
       </Td>
-      <Td className={cn("px-2 py-1.5", stickyBg, "left-[2.5rem] min-w-[10rem]")}>
+      <Td className={cn(tdBase, stickyTd, stickyCellBg, "left-8")}>
         <TextArea
-          rows={2}
+          rows={1}
           {...register(`lineItems.${index}.description`)}
-          className={cn(cellControlClass, "w-full min-w-[120px] resize-y")}
-          placeholder="Item or service"
+          className={cn(cellInput, "min-h-[1.75rem] resize-y")}
+          placeholder="Description"
         />
-        {rowErrors?.description ? (
-          <Text className="mt-0.5 text-xs text-red-600">{rowErrors.description.message}</Text>
-        ) : null}
+        <CellError message={rowErrors?.description?.message} />
       </Td>
-      <Td className="px-2 py-1.5">
+      <Td className={tdBase}>
         <Input
           inputMode="numeric"
           {...register(`lineItems.${index}.hsn`)}
-          className={cn(cellControlClass, "w-24 font-medium tracking-wide")}
+          className={cn(cellInput, "text-center tracking-wide")}
           maxLength={12}
-          placeholder="4–12 digits"
+          placeholder="HSN"
         />
-        {rowErrors?.hsn ? <Text className="mt-0.5 text-xs text-red-600">{rowErrors.hsn.message}</Text> : null}
+        <CellError message={rowErrors?.hsn?.message} />
       </Td>
-      <Td className="px-2 py-1.5">
+      <Td className={tdBase}>
         <Input
           type="number"
           step="any"
-          {...register(`lineItems.${index}.quantity`)}
-          className={cn(cellControlClass, "w-full min-w-[3.5rem] text-right tabular-nums")}
+          min={0}
+          {...register(`lineItems.${index}.quantity`, numField)}
+          className={numInput}
         />
-        {rowErrors?.quantity ? (
-          <Text className="mt-0.5 text-xs text-red-600">{rowErrors.quantity.message}</Text>
-        ) : null}
+        <CellError message={rowErrors?.quantity?.message} />
       </Td>
-      <Td className="min-w-[8rem] px-2 py-1.5">
+      <Td className={tdBase}>
         <Controller
           name={`lineItems.${index}.unit`}
           control={control}
@@ -132,8 +169,10 @@ const LineItemRow = memo(function LineItemRow({ index, lineCount, remove, onDupl
             <Select
               {...field}
               variant="compact"
-              className="w-full min-w-[7.5rem]"
-              aria-label={`Line ${index + 1} unit of measure`}
+              searchable
+              searchPlaceholder="Search units…"
+              className="w-full min-w-[5.5rem]"
+              aria-label={`Line ${index + 1} unit`}
             >
               {getLineItemUnitOptions(field.value ?? "").map((o) => (
                 <Option key={o.value} value={o.value}>
@@ -143,60 +182,52 @@ const LineItemRow = memo(function LineItemRow({ index, lineCount, remove, onDupl
             </Select>
           )}
         />
-        {rowErrors?.unit ? <Text className="mt-0.5 text-xs text-red-600">{rowErrors.unit.message}</Text> : null}
+        <CellError message={rowErrors?.unit?.message} />
       </Td>
-      <Td className="px-2 py-1.5">
+      <Td className={tdBase}>
         <Input
           type="number"
           step="any"
           min={0}
-          {...register(`lineItems.${index}.rate`)}
-          className={cn(cellControlClass, "w-full min-w-[4rem] text-right tabular-nums")}
+          {...register(`lineItems.${index}.rate`, numField)}
+          className={numInput}
         />
-        {rowErrors?.rate ? <Text className="mt-0.5 text-xs text-red-600">{rowErrors.rate.message}</Text> : null}
+        <CellError message={rowErrors?.rate?.message} />
       </Td>
-      <Td className="px-2 py-1.5">
-        <Box className="flex min-w-[8.5rem] flex-col gap-1 sm:flex-row sm:items-start">
-          <Controller
-            name={`lineItems.${index}.discountKind`}
-            control={control}
-            render={({ field: k }) => (
-              <Select
-                {...k}
-                variant="compact"
-                className="w-full shrink-0 font-medium sm:w-[3.75rem]"
-                aria-label={`Line ${index + 1} discount type`}
-              >
-                <Option value="AMOUNT">₹</Option>
-                <Option value="PERCENT">%</Option>
-              </Select>
-            )}
-          />
-          <Input
-            type="number"
-            step="0.01"
-            min={0}
-            max={isPercent ? 100 : undefined}
-            title={isPercent ? "Discount percent (0–100)" : "Discount amount in ₹"}
-            {...register(`lineItems.${index}.discount`)}
-            className={cn(cellControlClass, "w-full text-right tabular-nums sm:min-w-[3.5rem]")}
-          />
-        </Box>
-        {rowErrors?.discount ? (
-          <Text className="mt-0.5 text-xs text-red-600">{rowErrors.discount.message}</Text>
-        ) : null}
-        {rowErrors?.discountKind ? (
-          <Text className="mt-0.5 text-xs text-red-600">{rowErrors.discountKind.message}</Text>
-        ) : null}
+      <Td className={amtCellClass}>{formatAmt(amounts.gross)}</Td>
+      <Td className={tdBase}>
+        <Controller
+          name={`lineItems.${index}.taxPercent`}
+          control={control}
+          render={({ field }) => (
+            <Select
+              name={field.name}
+              ref={field.ref}
+              value={gstRateSelectValue(field.value, invoiceGstPercent)}
+              onBlur={field.onBlur}
+              variant="compact"
+              portaled
+              compactValueDisplay
+              className="w-full min-w-[4.5rem]"
+              aria-label={`Line ${index + 1} GST rate`}
+              onChange={(e) => {
+                field.onChange(coerceIndianGstRate(Number(e.target.value), invoiceGstPercent));
+              }}
+            >
+              {INDIAN_GST_RATE_OPTIONS.map((o) => (
+                <Option key={o.value} value={String(o.value)}>
+                  {o.label}
+                </Option>
+              ))}
+            </Select>
+          )}
+        />
+        <CellError message={rowErrors?.taxPercent?.message} />
       </Td>
-      <Td className="px-2 py-1.5 text-right text-sm font-medium tabular-nums text-zinc-950">
-        {amt.toLocaleString("en-IN", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}
-      </Td>
-      <Td className="w-[5.5rem] whitespace-nowrap px-2 py-1.5">
-        <Row className="items-center justify-end gap-1" gap="none">
+      <Td className={amtCellClass}>{formatAmt(amounts.tax)}</Td>
+      <Td className={cn(amtCellClass, "font-semibold")}>{formatAmt(amounts.total)}</Td>
+      <Td className={cn(tdBase, "text-center")}>
+        <Row className="items-center justify-center gap-0.5" gap="none">
           <Button
             type="button"
             variant="outline"
@@ -205,7 +236,7 @@ const LineItemRow = memo(function LineItemRow({ index, lineCount, remove, onDupl
             aria-label={`Copy line ${index + 1}`}
             title="Copy row"
           >
-            <Copy className="h-4 w-4 shrink-0" aria-hidden />
+            <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
           </Button>
           <Button
             type="button"
@@ -216,7 +247,7 @@ const LineItemRow = memo(function LineItemRow({ index, lineCount, remove, onDupl
             aria-label={`Delete line ${index + 1}`}
             title={lineCount <= 1 ? "At least one line is required" : "Delete row"}
           >
-            <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+            <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
           </Button>
         </Row>
       </Td>
@@ -234,6 +265,11 @@ export function LineItemsEditor() {
     control,
     name: "lineItems",
   });
+
+  const gstPercentWatch = useWatch({ control, name: "gstPercent" });
+  const taxModeWatch = useWatch({ control, name: "taxMode" });
+  const invoiceGstPercent = Number(gstPercentWatch) || 0;
+  const taxMode = taxModeWatch === "CGST_SGST" ? "CGST_SGST" : "IGST";
 
   const onDuplicate = (index: number) => {
     const row = getValues(`lineItems.${index}`);
@@ -255,6 +291,7 @@ export function LineItemsEditor() {
               rate: 0,
               discountKind: "AMOUNT",
               discount: 0,
+              taxPercent: coerceIndianGstRate(invoiceGstPercent),
             })
           }
         >
@@ -266,27 +303,50 @@ export function LineItemsEditor() {
           No line items yet. Use <Span className="font-semibold text-zinc-950">Add line</Span> to start.
         </Text>
       ) : (
-        <Box className="overflow-x-auto rounded-lg border border-zinc-300 bg-white shadow-sm">
-          <Table className="min-w-[680px] w-full divide-y divide-zinc-200 text-sm text-zinc-900">
-            <Thead className="bg-zinc-100 text-left text-[11px] font-semibold uppercase tracking-wide text-zinc-900">
-              <Tr>
-                <Th className={cn("px-2 py-2.5", stickyTh, "left-0 w-10 min-w-[2.5rem]")}>#</Th>
-                <Th className={cn("px-2 py-2.5", stickyTh, "left-[2.5rem] min-w-[10rem]")}>Description</Th>
-                <Th className="px-2 py-2.5">HSN</Th>
-                <Th className="px-2 py-2.5 text-right">Qty</Th>
-                <Th className="px-2 py-2.5">Unit</Th>
-                <Th className="px-2 py-2.5 text-right">Rate</Th>
-                <Th className="px-2 py-2.5">Disc.</Th>
-                <Th className="px-2 py-2.5 text-right">Taxable</Th>
-                <Th className="w-[5.5rem] px-2 py-2.5 text-right">Actions</Th>
+        <Box className="overflow-x-auto overflow-y-visible rounded-lg border border-zinc-300 bg-white shadow-sm">
+          <Table className="w-full min-w-[52rem] table-fixed border-collapse text-xs text-zinc-900">
+            <colgroup>
+              <col className="w-8" />
+              <col className="w-[10.5rem]" />
+              <col className="w-[4.25rem]" />
+              <col className="w-[3.75rem]" />
+              <col className="w-[7rem]" />
+              <col className="w-[4.5rem]" />
+              <col className="w-[6.25rem]" />
+              <col className="w-[4.25rem]" />
+              <col className="w-[5.5rem]" />
+              <col className="w-[6.25rem]" />
+              <col className="w-[4.25rem]" />
+            </colgroup>
+            <Thead>
+              <Tr className="bg-zinc-100">
+                <Th className={cn(thBase, stickyTh, "left-0 text-center")}>#</Th>
+                <Th className={cn(thBase, stickyTh, "left-8 text-left")}>Description</Th>
+                <Th className={cn(thBase, "text-center")}>HSN</Th>
+                <Th className={cn(thBase, "text-right")}>Qty</Th>
+                <Th className={cn(thBase, "text-center")}>Unit</Th>
+                <Th className={cn(thBase, "text-right")}>Rate</Th>
+                <Th className={cn(thBase, "text-right")} title="Qty × rate">
+                  Amount
+                </Th>
+                <Th className={cn(thBase, "text-right")}>GST %</Th>
+                <Th className={cn(thBase, "text-right")} title="Tax on qty × rate">
+                  Tax
+                </Th>
+                <Th className={cn(thBase, "text-right")}>Total</Th>
+                <Th className={cn(thBase, "text-center")}>
+                  <Span className="sr-only">Actions</Span>
+                </Th>
               </Tr>
             </Thead>
-            <Tbody className="divide-y divide-zinc-200 bg-white">
+            <Tbody>
               {fields.map((field, index) => (
                 <LineItemRow
                   key={field.id}
                   index={index}
                   lineCount={fields.length}
+                  invoiceGstPercent={invoiceGstPercent}
+                  taxMode={taxMode}
                   remove={remove}
                   onDuplicate={onDuplicate}
                 />

@@ -16,18 +16,6 @@ const SHADE = "#e8e8e8";
 const TAX_BAR = "#cfcfcf";
 const HEADER_BG = "#0a0a0a";
 
-/** Blank strip under line items: shrinks as more rows are added; keeps a minimum for short lists. */
-const LINE_ITEMS_FILL_MIN = 28;
-const LINE_ITEMS_BLOCK_TARGET = 160;
-const LINE_ITEMS_HEADER_APPROX = 30;
-const LINE_ITEMS_ROW_APPROX = 24;
-
-function lineItemsBlankFillHeight(lineCount: number): number {
-  const used =
-    LINE_ITEMS_HEADER_APPROX + Math.max(0, lineCount) * LINE_ITEMS_ROW_APPROX;
-  return Math.max(LINE_ITEMS_FILL_MIN, LINE_ITEMS_BLOCK_TARGET - used);
-}
-
 const styles = StyleSheet.create({
   page: {
     fontSize: 8,
@@ -144,8 +132,11 @@ const styles = StyleSheet.create({
   },
   irnLabel: { fontFamily: "Helvetica-Bold" },
 
-  metaCol: { flex: 1, flexDirection: "column" },
-  metaSplit: { flexDirection: "row" },
+  metaGridRow: { flexDirection: "row", borderBottomWidth: 1, borderColor: GRID },
+  metaGridRowLast: { flexDirection: "row", borderBottomWidth: 1, borderColor: GRID },
+  metaGridHalf: { flex: 1, flexDirection: "row", minHeight: 16 },
+  metaGridHalfWrap: { flex: 1 },
+  metaGridEmptyHalf: { flex: 1, minHeight: 16 },
   metaPair: {
     flexDirection: "row",
     alignItems: "stretch",
@@ -230,9 +221,19 @@ const styles = StyleSheet.create({
     fontSize: 7.5,
   },
 
+  fullWidthTable: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  tableRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    width: "100%",
+  },
   thRow: {
     flexDirection: "row",
     alignItems: "stretch",
+    width: "100%",
   },
   th: {
     fontFamily: "Helvetica-Bold",
@@ -263,6 +264,7 @@ const styles = StyleSheet.create({
   tr: {
     flexDirection: "row",
     alignItems: "stretch",
+    width: "100%",
     paddingVertical: 0,
     paddingHorizontal: 0,
   },
@@ -294,98 +296,80 @@ const styles = StyleSheet.create({
 
   vline: { borderLeftWidth: 1, borderColor: GRID },
 
-  blankFillRow: {
+  totalsBlock: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  totalsBody: {
     flexDirection: "row",
     alignItems: "stretch",
+    width: "100%",
   },
-
-  /** HSN / tax sub-table (separate column widths from line items). */
-  taxThRow: {
+  totalsWordsArea: {
+    alignSelf: "stretch",
+    paddingVertical: 5,
+    paddingHorizontal: 5,
+    justifyContent: "flex-end",
+  },
+  totalsFiguresTable: {
+    alignSelf: "stretch",
+    borderLeftWidth: 1,
+    borderColor: GRID,
+  },
+  totalsFigureRow: {
     flexDirection: "row",
     alignItems: "stretch",
     borderBottomWidth: 1,
     borderColor: GRID,
-    backgroundColor: SHADE,
+    minHeight: 22,
   },
-  taxCellWrap: {
-    alignSelf: "stretch",
+  totalsFigureLabelCol: {
     justifyContent: "center",
-  },
-
-  totalsRow: {
-    flexDirection: "row",
-    borderTopWidth: 1,
+    paddingVertical: 3,
+    paddingHorizontal: 4,
+    borderRightWidth: 1,
     borderColor: GRID,
   },
-  totalsLeft: {
-    flex: 1,
-    paddingVertical: 4,
+  totalsFigureValueCol: {
+    justifyContent: "center",
+    paddingVertical: 3,
     paddingHorizontal: 4,
   },
-  totalsRight: {
-    flex: 1,
-    flexDirection: "row",
-    borderLeftWidth: 1,
-    borderColor: GRID,
-  },
-  totalsLabelCell: {
-    width: "55%",
-    paddingVertical: 2,
-    paddingHorizontal: 4,
+  totalsFigureLabelText: {
     fontSize: 8,
     fontFamily: "Helvetica-Bold",
+    textAlign: "left",
   },
-  totalsValueCell: {
-    width: "45%",
-    paddingVertical: 2,
-    paddingHorizontal: 4,
+  totalsFigureValueText: {
     fontSize: 8,
     fontFamily: "Helvetica-Bold",
     textAlign: "right",
-    borderLeftWidth: 1,
-    borderColor: GRID,
-  },
-  totalsRowDivided: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderColor: GRID,
   },
 
   grandRow: {
     flexDirection: "row",
-    borderTopWidth: 1,
-    borderColor: GRID,
+    width: "100%",
     backgroundColor: SHADE,
+    alignItems: "stretch",
   },
-  grandLeft: {
-    flex: 1,
+  grandLabelCell: {
+    justifyContent: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 5,
+  },
+  grandValueCell: {
+    justifyContent: "center",
     paddingVertical: 4,
     paddingHorizontal: 4,
+  },
+  grandLabelText: {
     fontSize: 9,
     fontFamily: "Helvetica-Bold",
   },
-  grandRight: {
-    flex: 1,
-    flexDirection: "row",
-    borderLeftWidth: 1,
-    borderColor: GRID,
-  },
-  grandLabel: {
-    width: "55%",
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-    fontSize: 9,
-    fontFamily: "Helvetica-Bold",
-  },
-  grandValue: {
-    width: "45%",
-    paddingVertical: 4,
-    paddingHorizontal: 4,
+  grandValueText: {
     fontSize: 9,
     fontFamily: "Helvetica-Bold",
     textAlign: "right",
-    borderLeftWidth: 1,
-    borderColor: GRID,
   },
 
   certRow: {
@@ -435,19 +419,13 @@ function fmt(n: number) {
   });
 }
 
-function fmtPct(n: number) {
-  return n.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
 function fmtQty(n: number) {
   return n.toLocaleString("en-IN", {
     minimumFractionDigits: 3,
     maximumFractionDigits: 3,
   });
 }
+
 
 function normalizeQrSrc(raw?: string): string | undefined {
   if (!raw || !raw.trim()) return undefined;
@@ -499,6 +477,97 @@ function MetaPair({
   );
 }
 
+function metaGridText(s: string | undefined | null): string {
+  return (s ?? "").trim();
+}
+
+function MetaGridValueText({ text, dashIfEmpty = false }: { text: string; dashIfEmpty?: boolean }) {
+  const valueText = metaGridText(text);
+  const display = valueText || (dashIfEmpty ? "—" : " ");
+  const lines = display.split("\n");
+  if (lines.length <= 1) {
+    return <Text style={styles.metaValueText}>{display}</Text>;
+  }
+  return (
+    <View>
+      {lines.map((line, i) => (
+        <Text key={i} style={[styles.metaValueText, i > 0 ? { marginTop: 1 } : {}]}>
+          {line}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
+function purchaserNameGridValue(
+  purchaserName: string | undefined,
+  billToName: string | undefined,
+  pan: string | undefined,
+): string {
+  const name = metaGridText(purchaserName) || metaGridText(billToName);
+  const panText = metaGridText(pan);
+  if (name && panText) return `${name}\nPAN : ${panText}`;
+  if (panText) return `PAN : ${panText}`;
+  return name;
+}
+
+function MetaGridHalf({
+  label,
+  value,
+  dashIfEmpty = false,
+}: {
+  label: string;
+  value: string;
+  /** Show em dash when value is empty (only when the paired left cell has a value). */
+  dashIfEmpty?: boolean;
+}) {
+  const labelText = metaGridText(label);
+  return (
+    <View style={styles.metaGridHalf}>
+      <View style={styles.metaLabelCell}>
+        <Text style={styles.metaLabelText}>{labelText || " "}</Text>
+      </View>
+      <View style={styles.metaValueCell}>
+        <MetaGridValueText text={value} dashIfEmpty={dashIfEmpty} />
+      </View>
+    </View>
+  );
+}
+
+function MetaGridRow({
+  left,
+  right,
+  last = false,
+}: {
+  left: { label: string; value: string };
+  right: { label: string; value: string };
+  last?: boolean;
+}) {
+  const leftHasValue = Boolean(metaGridText(left.value));
+  const rightBlank = !metaGridText(right.label) && !metaGridText(right.value);
+  const rowStyle = last ? styles.metaGridRowLast : styles.metaGridRow;
+
+  if (rightBlank) {
+    return (
+      <View style={rowStyle}>
+        <View style={styles.metaGridHalfWrap}>
+          <MetaGridHalf label={left.label} value={left.value} />
+        </View>
+        <View style={[styles.metaGridHalfWrap, styles.vsplit, styles.metaGridEmptyHalf]} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={rowStyle}>
+      <MetaGridHalf label={left.label} value={left.value} />
+      <View style={[styles.metaGridHalfWrap, styles.vsplit]}>
+        <MetaGridHalf label={right.label} value={right.value} dashIfEmpty={leftHasValue} />
+      </View>
+    </View>
+  );
+}
+
 function PartyDetailLine({
   leftLabel,
   leftValue,
@@ -531,13 +600,54 @@ function PartyDetailLine({
   );
 }
 
-const colSn = { width: "5%" };
-const colDesc = { width: "38%" };
-const colHsn = { width: "12%" };
-const colQty = { width: "10%" };
-const colUom = { width: "7%" };
-const colRate = { width: "13%" };
-const colAmt = { width: "15%" };
+/** Column widths must sum to 100% so the table spans the full page content width. */
+const colSn = { width: "4%" };
+const colDesc = { width: "27%" };
+const colHsn = { width: "9%" };
+const colQty = { width: "8%" };
+const colUom = { width: "6%" };
+const colRate = { width: "9%" };
+const colGross = { width: "10%" };
+const colTax = { width: "9%" };
+const colLineTotal = { width: "18%" };
+
+/** Add one blank line-item row when count is at most this (keeps short lists from looking cramped). */
+const LINE_ITEMS_FILLER_MAX = 4;
+
+/** Labels in Tax column, values in Total column (divider matches Amount | Tax). */
+const TOTALS_TAX_PCT = 9;
+const TOTALS_VALUE_PCT = 18;
+const totalsWordsWidth = {
+  width: `${100 - TOTALS_TAX_PCT - TOTALS_VALUE_PCT}%` as const,
+};
+const totalsFiguresWidth = {
+  width: `${TOTALS_TAX_PCT + TOTALS_VALUE_PCT}%` as const,
+};
+
+const FIGURES_COL_SUM = TOTALS_TAX_PCT + TOTALS_VALUE_PCT;
+const totalsFiguresLabelColWidth = {
+  width: `${(TOTALS_TAX_PCT / FIGURES_COL_SUM) * 100}%` as const,
+};
+const totalsFiguresValueColWidth = {
+  width: `${(TOTALS_VALUE_PCT / FIGURES_COL_SUM) * 100}%` as const,
+};
+
+function TotalsFigureRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.totalsFigureRow}>
+      <View style={[styles.totalsFigureLabelCol, totalsFiguresLabelColWidth]}>
+        <Text style={styles.totalsFigureLabelText} wrap={false}>
+          {label}
+        </Text>
+      </View>
+      <View style={[styles.totalsFigureValueCol, totalsFiguresValueColWidth]}>
+        <Text style={styles.totalsFigureValueText} wrap={false}>
+          {value}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 export function InvoicePdfDocument({
   invoice,
@@ -568,7 +678,7 @@ export function InvoicePdfDocument({
   }`;
   const shipParty = shipSame ? billTo : shipToResolved;
   const shipStateBadge = shipParty.stateCode || "";
-  const lineItemsFillH = lineItemsBlankFillHeight(totals.lines.length);
+  const showItemsFillerRow = totals.lines.length <= LINE_ITEMS_FILLER_MAX;
 
   return (
     <Document>
@@ -623,39 +733,49 @@ export function InvoicePdfDocument({
             </View>
           </View>
 
-          <View style={styles.metaSplit}>
-            <View style={styles.metaCol}>
-              <MetaPair label="Invoice No." value={invoice.invoiceNumber} />
-              <MetaPair label="Invoice Date" value={invoice.invoiceDate} />
-              <MetaPair label="Our GSTIN" value={seller.gstin} />
-              <MetaPair label="Reverse Charge" value={invoice.reverseCharge ? "YES" : "NO"} />
-              <MetaPair
-                label="Freight Payment Terms"
-                value={invoice.freightPaymentTerms || "—"}
-              />
-              <MetaPair label="Insurance Terms" value={invoice.insuranceTerms || "—"} />
-              <MetaPair label="Delivery Terms" value={invoice.deliveryTermsLine || "—"} />
-              <MetaPair label="Machine Sr. No." value={invoice.machineSerialNo || "—"} />
-              <MetaPair
-                label="Place of Supply"
-                value={`${invoice.placeOfSupplyCode}-${invoice.placeOfSupplyState}`}
-                last
-              />
-            </View>
-            <View style={[styles.metaCol, styles.vsplit]}>
-              <MetaPair label="Purchase Order No." value={invoice.poNumber || "—"} />
-              <MetaPair label="Purchase Order Date" value={invoice.purchaseOrderDate || "—"} />
-              <MetaPair label="Buyer's PAN" value={billTo.pan || "—"} />
-              <MetaPair label="Payment Terms" value={invoice.paymentTerms || "—"} />
-              <MetaPair label="Name of Transporter" value={invoice.transport || "—"} />
-              <MetaPair label="L.R. No. & Date" value={invoice.lrNumberAndDate || "—"} />
-              <MetaPair label="Vehicle No." value={invoice.vehicle || "—"} />
-              <MetaPair label="Way Bill No." value={invoice.eWayBill || "—"} />
-              <MetaPair label="Others" value={invoice.otherMeta || invoice.destination || "—"} last />
-            </View>
+          <View>
+            <MetaGridRow
+              left={{ label: "Invoice No.", value: invoice.invoiceNumber }}
+              right={{ label: "Name of Transporter", value: invoice.transport ?? "" }}
+            />
+            <MetaGridRow
+              left={{ label: "Invoice Date", value: invoice.invoiceDate }}
+              right={{ label: "L.R. No. & Date", value: invoice.lrNumberAndDate ?? "" }}
+            />
+            <MetaGridRow
+              left={{ label: "Our GSTIN", value: seller.gstin }}
+              right={{ label: "Vehicle No.", value: invoice.vehicle ?? "" }}
+            />
+            <MetaGridRow
+              left={{ label: "Reverse Charge", value: invoice.reverseCharge ? "YES" : "NO" }}
+              right={{ label: "Way Bill No.", value: invoice.eWayBill ?? "" }}
+            />
+            <MetaGridRow
+              left={{ label: "Purchase Order No.", value: invoice.poNumber ?? "" }}
+              right={{ label: "Delivery Terms", value: invoice.deliveryTermsLine ?? "" }}
+            />
+            <MetaGridRow
+              left={{ label: "Purchase Order Date", value: invoice.purchaseOrderDate ?? "" }}
+              right={{ label: "Delivery Note", value: invoice.deliveryNote ?? "" }}
+            />
+            <MetaGridRow
+              left={{
+                label: "Purchaser Name",
+                value: purchaserNameGridValue(
+                  invoice.purchaserName,
+                  billTo.name,
+                  billTo.pan,
+                ),
+              }}
+              right={{
+                label: "Others",
+                value: invoice.otherMeta || invoice.destination || "",
+              }}
+              last
+            />
           </View>
 
-          <View style={[styles.partyHeaderRow, { borderTopWidth: 1, borderColor: GRID }]}>
+          <View style={styles.partyHeaderRow}>
             <View style={styles.partyHeaderCell}>
               <Text style={styles.partyHeaderLabel}>
                 Name &amp; Address of Recipient ( Billed to )
@@ -678,11 +798,6 @@ export function InvoicePdfDocument({
             <View style={[styles.partyBody, styles.vline]}>
               <Text style={styles.partyName}>{shipParty.name}</Text>
               <Multiline text={shipParty.address} />
-              {shipSame ? (
-                <Text style={[styles.partyText, { color: "#666", marginTop: 2 }]}>
-                  (Same as billed to above)
-                </Text>
-              ) : null}
             </View>
           </View>
 
@@ -692,6 +807,20 @@ export function InvoicePdfDocument({
             rightLabel="State & Code"
             rightValue={`${shipParty.stateCode || ""}-${shipParty.stateName || ""}`}
           />
+          <PartyDetailLine
+            leftLabel="Pincode"
+            leftValue={billTo.pincode || "—"}
+            rightLabel="Pincode"
+            rightValue={shipParty.pincode || billTo.pincode || "—"}
+          />
+          {billTo.city || shipParty.city ? (
+            <PartyDetailLine
+              leftLabel="City"
+              leftValue={billTo.city || "—"}
+              rightLabel="City"
+              rightValue={shipParty.city || billTo.city || "—"}
+            />
+          ) : null}
           <PartyDetailLine
             leftLabel="GSTIN"
             leftValue={billTo.gstin}
@@ -716,7 +845,7 @@ export function InvoicePdfDocument({
             </View>
           )}
 
-          <View wrap={false}>
+          <View style={styles.fullWidthTable} wrap={false}>
             <View style={styles.thRow}>
               <View style={[colSn, styles.itemsHeaderCell]}>
                 <Text style={[styles.itemsThText, { textAlign: "center" }]}>
@@ -738,8 +867,16 @@ export function InvoicePdfDocument({
               <View style={[colRate, styles.itemsHeaderCell, styles.itemsHeaderCellSplit]}>
                 <Text style={[styles.itemsThText, { textAlign: "right" }]}>Rate</Text>
               </View>
-              <View style={[colAmt, styles.itemsHeaderCell, styles.itemsHeaderCellSplit]}>
+              <View style={[colGross, styles.itemsHeaderCell, styles.itemsHeaderCellSplit]}>
                 <Text style={[styles.itemsThText, { textAlign: "right" }]}>Amount</Text>
+              </View>
+              <View style={[colTax, styles.itemsHeaderCell, styles.itemsHeaderCellSplit]}>
+                <Text style={[styles.itemsThText, { textAlign: "right" }]}>
+                  {totals.taxMode === "IGST" ? "IGST" : "Tax"}
+                </Text>
+              </View>
+              <View style={[colLineTotal, styles.itemsHeaderCell, styles.itemsHeaderCellSplit]}>
+                <Text style={[styles.itemsThText, { textAlign: "right" }]}>Total</Text>
               </View>
             </View>
             {totals.lines.map((line, i) => (
@@ -762,141 +899,77 @@ export function InvoicePdfDocument({
                 <View style={[colRate, styles.itemsBodyCell, styles.itemsBodyCellSplit]}>
                   <Text style={styles.tdR}>{fmt(line.rate)}</Text>
                 </View>
-                <View style={[colAmt, styles.itemsBodyCell, styles.itemsBodyCellSplit]}>
-                  <Text style={styles.tdR}>{fmt(line.taxableValue)}</Text>
+                <View style={[colGross, styles.itemsBodyCell, styles.itemsBodyCellSplit]}>
+                  <Text style={styles.tdR}>{fmt(line.grossAmount)}</Text>
+                </View>
+                <View style={[colTax, styles.itemsBodyCell, styles.itemsBodyCellSplit]}>
+                  <Text style={styles.tdR}>{fmt(line.taxAmount)}</Text>
+                </View>
+                <View style={[colLineTotal, styles.itemsBodyCell, styles.itemsBodyCellSplit]}>
+                  <Text style={styles.tdR}>{fmt(line.lineTotal)}</Text>
                 </View>
               </View>
             ))}
-
-            <View style={[styles.blankFillRow, { height: lineItemsFillH }]} wrap={false}>
-              <View style={[colSn, styles.itemsBodyCell]} />
-              <View style={[colDesc, styles.itemsBodyDescCell]} />
-              <View style={[colHsn, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
-              <View style={[colQty, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
-              <View style={[colUom, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
-              <View style={[colRate, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
-              <View style={[colAmt, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
-            </View>
-          </View>
-
-          <View style={styles.taxThRow}>
-            <View style={[{ width: "20%" }, styles.taxCellWrap]}>
-              <Text style={[styles.th, { textAlign: "left" }]}>HSN Code</Text>
-            </View>
-            <View style={[{ width: "22%" }, styles.vline, styles.taxCellWrap]}>
-              <Text style={[styles.th, { textAlign: "right" }]}>Taxable</Text>
-            </View>
-            <View style={[{ width: "12%" }, styles.vline, styles.taxCellWrap]}>
-              <Text style={[styles.th, { textAlign: "center" }]}>
-                {totals.taxMode === "IGST" ? "IGST %" : "GST %"}
-              </Text>
-            </View>
-            <View style={[{ width: "22%" }, styles.vline, styles.taxCellWrap]}>
-              <Text style={[styles.th, { textAlign: "right" }]}>
-                {totals.taxMode === "IGST" ? "IGST Amt" : "CGST+SGST"}
-              </Text>
-            </View>
-            <View style={[{ width: "24%" }, styles.vline, styles.taxCellWrap]}>
-              <Text style={[styles.th, { textAlign: "right" }]}>Quantity</Text>
-            </View>
-          </View>
-          {totals.hsnSummary.map((row) => (
-            <View key={row.hsn} style={styles.tr} wrap={false}>
-              <View style={[{ width: "20%" }, styles.taxCellWrap]}>
-                <Text style={styles.tdL}>{row.hsn}</Text>
-              </View>
-              <View style={[{ width: "22%" }, styles.vline, styles.taxCellWrap]}>
-                <Text style={styles.tdR}>{fmt(row.taxableValue)}</Text>
-              </View>
-              <View style={[{ width: "12%" }, styles.vline, styles.taxCellWrap]}>
-                <Text style={styles.tdC}>{fmtPct(row.taxRatePercent)}</Text>
-              </View>
-              <View style={[{ width: "22%" }, styles.vline, styles.taxCellWrap]}>
-                <Text style={styles.tdR}>
-                  {totals.taxMode === "IGST"
-                    ? fmt(row.igstAmount)
-                    : `${fmt(row.cgstAmount)} + ${fmt(row.sgstAmount)}`}
-                </Text>
-              </View>
-              <View style={[{ width: "24%" }, styles.vline, styles.taxCellWrap]}>
-                <Text style={styles.tdR}>
-                  {fmtQty(
-                    totals.lines
-                      .filter((l) => l.hsn === row.hsn)
-                      .reduce((s, l) => s + l.quantity, 0),
-                  )}
-                </Text>
-              </View>
-            </View>
-          ))}
-
-          <View style={styles.totalsRow}>
-            <View style={styles.totalsLeft} />
-            <View style={styles.totalsRight}>
-              <Text style={styles.totalsLabelCell}>Total</Text>
-              <Text style={styles.totalsValueCell}>{fmt(totals.subtotalTaxable)}</Text>
-            </View>
-          </View>
-          {totals.extraCharges > 0 ? (
-            <View style={styles.totalsRowDivided}>
-              <View style={styles.totalsLeft} />
-              <View style={styles.totalsRight}>
-                <Text style={styles.totalsLabelCell}>
-                  {invoice.extraChargesLabel ?? "Other charges"}
-                </Text>
-                <Text style={styles.totalsValueCell}>{fmt(totals.extraCharges)}</Text>
-              </View>
-            </View>
-          ) : null}
-          {totals.taxMode === "IGST" ? (
-            <View style={styles.totalsRowDivided}>
-              <View style={styles.totalsLeft} />
-              <View style={styles.totalsRight}>
-                <Text style={styles.totalsLabelCell}>IGST Amount</Text>
-                <Text style={styles.totalsValueCell}>{fmt(totals.igst)}</Text>
-              </View>
-            </View>
-          ) : (
-            <>
-              <View style={styles.totalsRowDivided}>
-                <View style={styles.totalsLeft} />
-                <View style={styles.totalsRight}>
-                  <Text style={styles.totalsLabelCell}>CGST</Text>
-                  <Text style={styles.totalsValueCell}>{fmt(totals.cgst)}</Text>
+            {showItemsFillerRow ? (
+              <View style={styles.tr} wrap={false}>
+                <View style={[colSn, styles.itemsBodyCell]}>
+                  <Text style={styles.tdC}> </Text>
                 </View>
+                <View style={[colDesc, styles.itemsBodyDescCell]} />
+                <View style={[colHsn, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
+                <View style={[colQty, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
+                <View style={[colUom, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
+                <View style={[colRate, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
+                <View style={[colGross, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
+                <View style={[colTax, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
+                <View style={[colLineTotal, styles.itemsBodyCell, styles.itemsBodyCellSplit]} />
               </View>
-              <View style={styles.totalsRowDivided}>
-                <View style={styles.totalsLeft} />
-                <View style={styles.totalsRight}>
-                  <Text style={styles.totalsLabelCell}>SGST</Text>
-                  <Text style={styles.totalsValueCell}>{fmt(totals.sgst)}</Text>
-                </View>
+            ) : null}
+          </View>
+
+          <View style={styles.totalsBlock}>
+            <View style={styles.totalsBody}>
+              <View style={[styles.totalsWordsArea, totalsWordsWidth]}>
+                <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 8 }}>
+                  Amount in words : -
+                </Text>
+                <Text style={{ fontSize: 8.5, marginTop: 2 }}>{amountWords}</Text>
               </View>
-            </>
-          )}
-          {totals.roundOff !== 0 ? (
-            <View style={styles.totalsRowDivided}>
-              <View style={styles.totalsLeft} />
-              <View style={styles.totalsRight}>
-                <Text style={styles.totalsLabelCell}>Round off</Text>
-                <Text style={styles.totalsValueCell}>
-                  {totals.roundOff < 0 ? "-" : "+"}
-                  {fmt(Math.abs(totals.roundOff))}
+              <View style={[styles.totalsFiguresTable, totalsFiguresWidth]}>
+                <TotalsFigureRow label="Total" value={fmt(totals.subtotalTaxable)} />
+                {totals.extraCharges > 0 ? (
+                  <TotalsFigureRow
+                    label={invoice.extraChargesLabel ?? "Other charges"}
+                    value={fmt(totals.extraCharges)}
+                  />
+                ) : null}
+                {totals.taxMode === "IGST" ? (
+                  <TotalsFigureRow label="IGST Amount" value={fmt(totals.igst)} />
+                ) : (
+                  <>
+                    <TotalsFigureRow label="CGST" value={fmt(totals.cgst)} />
+                    <TotalsFigureRow label="SGST" value={fmt(totals.sgst)} />
+                  </>
+                )}
+                {totals.roundOff !== 0 ? (
+                  <TotalsFigureRow
+                    label="Round off"
+                    value={`${totals.roundOff < 0 ? "-" : "+"}${fmt(Math.abs(totals.roundOff))}`}
+                  />
+                ) : null}
+              </View>
+            </View>
+
+            <View style={styles.grandRow}>
+              <View style={[styles.grandLabelCell, totalsWordsWidth]}>
+                <Text style={styles.grandLabelText}>GRAND TOTAL</Text>
+              </View>
+              <View style={[colTax, styles.totalsFigureLabelCol]} />
+              <View style={[colLineTotal, styles.grandValueCell, styles.totalsFigureValueCol]}>
+                <Text style={styles.grandValueText} wrap={false}>
+                  {fmt(totals.grandTotal)}
                 </Text>
               </View>
-            </View>
-          ) : null}
-
-          <View style={styles.grandRow}>
-            <View style={styles.grandLeft}>
-              <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 8 }}>
-                Amount in words : -
-              </Text>
-              <Text style={{ fontSize: 8.5, marginTop: 2 }}>{amountWords}</Text>
-            </View>
-            <View style={styles.grandRight}>
-              <Text style={styles.grandLabel}>GRAND TOTAL</Text>
-              <Text style={styles.grandValue}>{fmt(totals.grandTotal)}</Text>
             </View>
           </View>
         </View>
