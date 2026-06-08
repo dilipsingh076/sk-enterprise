@@ -20,4 +20,11 @@ export { RootHtml, RootBody } from "@/components/ui/document";
 export { VisuallyHidden } from "@/components/ui/visually-hidden";
 export { Option } from "@/components/ui/option";
 export { Field } from "@/components/ui/field";
+export {
+  FormField,
+  FormFieldGroup,
+  FormSection,
+  TextAreaField,
+  TextField,
+} from "@/components/ui/compounds";
 export { fieldInputClass, fieldLabelClass, fieldLabelInlineClass } from "@/components/ui/tokens";

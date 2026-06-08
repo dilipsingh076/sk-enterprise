@@ -8,6 +8,7 @@ import {
 } from "@react-pdf/renderer";
 import type { Style } from "@react-pdf/types";
 import type { InvoiceTotals } from "@/lib/invoice/calculations";
+import { normalizeInvoiceDateStorage } from "@/lib/invoice/formatInvoiceDate";
 import type { Invoice } from "@/lib/invoice/schema";
 
 const BORDER = "#000";
@@ -456,27 +457,6 @@ function Multiline({
   );
 }
 
-function MetaPair({
-  label,
-  value,
-  last = false,
-}: {
-  label: string;
-  value: string;
-  last?: boolean;
-}) {
-  return (
-    <View style={last ? styles.metaPairLast : styles.metaPair}>
-      <View style={styles.metaLabelCell}>
-        <Text style={styles.metaLabelText}>{label}</Text>
-      </View>
-      <View style={styles.metaValueCell}>
-        <Text style={styles.metaValueText}>{value || "—"}</Text>
-      </View>
-    </View>
-  );
-}
-
 function metaGridText(s: string | undefined | null): string {
   return (s ?? "").trim();
 }
@@ -499,12 +479,8 @@ function MetaGridValueText({ text, dashIfEmpty = false }: { text: string; dashIf
   );
 }
 
-function purchaserNameGridValue(
-  purchaserName: string | undefined,
-  billToName: string | undefined,
-  pan: string | undefined,
-): string {
-  const name = metaGridText(purchaserName) || metaGridText(billToName);
+function purchaserNameGridValue(purchaserName: string | undefined, pan: string | undefined): string {
+  const name = metaGridText(purchaserName);
   const panText = metaGridText(pan);
   if (name && panText) return `${name}\nPAN : ${panText}`;
   if (panText) return `PAN : ${panText}`;
@@ -655,6 +631,7 @@ export function InvoicePdfDocument({
   amountWords,
   taxAmountWords,
   logoSrc,
+  showDraftWatermark = false,
 }: {
   invoice: Invoice;
   totals: InvoiceTotals;
@@ -662,6 +639,8 @@ export function InvoicePdfDocument({
   taxAmountWords: string;
   /** Bundled SK logo (base64 data URI), optional if file missing */
   logoSrc?: string | null;
+  /** Shown on inline PDF preview before final download. */
+  showDraftWatermark?: boolean;
 }) {
   const { seller, billTo, shipToResolved, eInvoice } = invoice;
   const qrSrc = normalizeQrSrc(eInvoice.qrImageBase64);
@@ -702,6 +681,19 @@ export function InvoicePdfDocument({
         <View style={styles.taxInvoiceBar}>
           <Text style={styles.taxInvoiceText}>TAX INVOICE</Text>
         </View>
+        {showDraftWatermark ? (
+          <Text
+            style={{
+              textAlign: "center",
+              fontSize: 9,
+              color: "#666",
+              marginBottom: 4,
+              fontFamily: "Helvetica-Bold",
+            }}
+          >
+            DRAFT — PREVIEW ONLY
+          </Text>
+        ) : null}
 
         <View style={styles.outer}>
           <View style={styles.topBuyerRow}>
@@ -727,7 +719,7 @@ export function InvoicePdfDocument({
               {eInvoice.ackDate ? (
                 <Text>
                   <Text style={styles.irnLabel}>Ack Date : </Text>
-                  {eInvoice.ackDate}
+                  {normalizeInvoiceDateStorage(eInvoice.ackDate)}
                 </Text>
               ) : null}
             </View>
@@ -739,7 +731,7 @@ export function InvoicePdfDocument({
               right={{ label: "Name of Transporter", value: invoice.transport ?? "" }}
             />
             <MetaGridRow
-              left={{ label: "Invoice Date", value: invoice.invoiceDate }}
+              left={{ label: "Invoice Date", value: normalizeInvoiceDateStorage(invoice.invoiceDate) }}
               right={{ label: "L.R. No. & Date", value: invoice.lrNumberAndDate ?? "" }}
             />
             <MetaGridRow
@@ -755,17 +747,16 @@ export function InvoicePdfDocument({
               right={{ label: "Delivery Terms", value: invoice.deliveryTermsLine ?? "" }}
             />
             <MetaGridRow
-              left={{ label: "Purchase Order Date", value: invoice.purchaseOrderDate ?? "" }}
+              left={{
+                label: "Purchase Order Date",
+                value: normalizeInvoiceDateStorage(invoice.purchaseOrderDate),
+              }}
               right={{ label: "Delivery Note", value: invoice.deliveryNote ?? "" }}
             />
             <MetaGridRow
               left={{
                 label: "Purchaser Name",
-                value: purchaserNameGridValue(
-                  invoice.purchaserName,
-                  billTo.name,
-                  billTo.pan,
-                ),
+                value: purchaserNameGridValue(invoice.purchaserName, billTo.pan),
               }}
               right={{
                 label: "Others",

@@ -96,6 +96,7 @@ export const DEFAULT_USER_PROFILE: UserProfile = {
   companies: DEFAULT_COMPANIES,
   defaultCompanyId: "company-utk",
   recentBillTo: [],
+  savedLineItems: [],
 };
 
 function migrateLegacyProfile(raw: unknown): UserProfile | null {
@@ -119,6 +120,7 @@ function migrateLegacyProfile(raw: unknown): UserProfile | null {
     ],
     defaultCompanyId: "company-utk",
     recentBillTo: [],
+    savedLineItems: [],
   };
 }
 
@@ -135,6 +137,7 @@ function tryCoerceSingleCompanyArray(raw: unknown): UserProfile | null {
     companies: [only, DEFAULT_COMPANIES[1]],
     defaultCompanyId: row.data.defaultCompanyId || only.id,
     recentBillTo: [],
+    savedLineItems: [],
   };
 }
 
@@ -167,6 +170,7 @@ function partyWithPincode<T extends { pincode?: string }>(party: T): T & { pinco
 export function ensureUserProfileDefaults(profile: UserProfile): UserProfile {
   return {
     ...profile,
+    savedLineItems: profile.savedLineItems ?? [],
     recentBillTo: (profile.recentBillTo ?? []).map(partyWithPincode),
     companies: profile.companies.map((c) => ({
       ...c,

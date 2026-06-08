@@ -1,5 +1,6 @@
 "use client";
 
+import { formatInvoiceDate } from "@/lib/invoice/formatInvoiceDate";
 import { partySchema, type InvoiceFormInput, type Party } from "@/lib/invoice/schema";
 import type { UserProfile } from "@/lib/invoice/userProfile";
 import { mergeRecentBillToUserProfile } from "@/lib/profile/recentBillTo";
@@ -105,6 +106,56 @@ export async function deleteBill(id: string): Promise<void> {
   const res = await fetch(`/api/storage/bills/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Delete failed");
   invalidateBillsListCache();
+}
+
+export async function duplicateBill(sourceId: string, invoiceNumber: string): Promise<BillRecord> {
+  const source = await fetchBill(sourceId);
+  const invoice = {
+    ...source.invoice,
+    invoiceNumber,
+    invoiceDate: formatInvoiceDate(new Date().toISOString().slice(0, 10)),
+  };
+  const title = `${invoiceNumber} — ${source.invoice.billTo.name}`;
+  return createBill(invoice, title);
+}
+
+export function downloadStorageExport(): void {
+  window.location.assign("/api/storage/export");
+}
+
+function normalizeImportPayload(parsed: unknown): {
+  profile?: unknown;
+  bills?: unknown;
+  draft?: unknown;
+} {
+  if (!parsed || typeof parsed !== "object") return {};
+  const o = parsed as Record<string, unknown>;
+  if (o.profile != null || o.bills != null || o.draft != null) {
+    return { profile: o.profile, bills: o.bills, draft: o.draft };
+  }
+  const nested = o.data;
+  if (nested && typeof nested === "object") {
+    const d = nested as Record<string, unknown>;
+    return { profile: d.profile, bills: d.bills, draft: d.draft };
+  }
+  return {};
+}
+
+export async function importStorageBackup(
+  file: File,
+  mode: "merge" | "replace",
+): Promise<{ billsCount: number; message: string }> {
+  const text = await file.text();
+  const parsed = JSON.parse(text) as unknown;
+  const data = normalizeImportPayload(parsed);
+  const res = await fetch("/api/storage/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode, data }),
+  });
+  const result = await parseJson<{ billsCount: number; message: string }>(res);
+  invalidateBillsListCache();
+  return result;
 }
 
 /**

@@ -2,6 +2,7 @@ import {
   DEFAULT_INVOICE_GST_PERCENT,
   initialTaxFieldsFromSeller,
 } from "@/lib/invoice/billTaxDefaults";
+import { formatInvoiceDate, normalizeInvoiceDateStorage } from "@/lib/invoice/formatInvoiceDate";
 import { coerceIndianGstRate } from "@/lib/invoice/indianGstRates";
 import type { InvoiceFormInput, LineItem } from "@/lib/invoice/schema";
 import type { UserProfile } from "@/lib/invoice/userProfile";
@@ -52,10 +53,12 @@ export function normalizeLoadedInvoiceForm(data: InvoiceFormInput): InvoiceFormI
   void _m;
   return {
     ...rest,
-    purchaserName: rest.purchaserName?.trim() || rest.billTo.name?.trim() || legacyPaymentTerms?.trim() || "",
+    purchaserName: rest.purchaserName?.trim() || legacyPaymentTerms?.trim() || "",
     billTo: { ...rest.billTo, pincode: rest.billTo.pincode ?? "" },
     shipTo: rest.shipTo ? { ...rest.shipTo, pincode: rest.shipTo.pincode ?? "" } : rest.shipTo,
     lineItems: rest.lineItems.map((row) => normalizeLineItemsLine(row, defaultTax)),
+    invoiceDate: normalizeInvoiceDateStorage(rest.invoiceDate),
+    purchaseOrderDate: normalizeInvoiceDateStorage(rest.purchaseOrderDate),
   };
 }
 
@@ -84,7 +87,7 @@ export function buildBillFormDefaults(
   const cid = resolveActiveCompanyId(p, activeCompanyId);
   const seller = getSellerForCompanyId(p, cid);
   const tax = initialTaxFieldsFromSeller(seller);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = formatInvoiceDate(new Date().toISOString().slice(0, 10));
   const prefix = getInvoiceNumberPrefixForCompanyId(p, cid);
   return {
     seller,

@@ -1,6 +1,17 @@
 import { z } from "zod";
 import { partySchema, sellerSchema } from "@/lib/invoice/schema";
 
+export const savedLineItemSchema = z.object({
+  id: z.string().min(1),
+  description: z.string().min(1),
+  hsn: z.string().min(4),
+  unit: z.string().min(1),
+  rate: z.coerce.number().nonnegative(),
+  taxPercent: z.coerce.number().min(0).max(100).optional(),
+});
+
+export type SavedLineItem = z.infer<typeof savedLineItemSchema>;
+
 export const companyPresetSchema = z.object({
   id: z.string().min(1),
   /** Shown in the invoice “Issue as” menu */
@@ -26,6 +37,8 @@ export const userProfileSchema = z
     defaultCompanyId: z.string().min(1),
     /** Recently used bill-to parties (deduped by GSTIN); max 20. */
     recentBillTo: z.array(partySchema).max(20).default([]),
+    /** Reusable line templates (description, HSN, unit, rate, GST %). */
+    savedLineItems: z.array(savedLineItemSchema).max(40).default([]),
   })
   .refine((d) => d.companies.some((c) => c.id === d.defaultCompanyId), {
     message: "Default company must match one of the two profiles",

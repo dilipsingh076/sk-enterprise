@@ -19,10 +19,13 @@ import {
   useFormState,
   useWatch,
   type FieldErrors,
+  type Path,
   type Resolver,
 } from "react-hook-form";
+import { visibleFieldError } from "@/lib/form/visibleFieldError";
 import { computeInvoiceTotals } from "@/lib/invoice/calculations";
 import { fetchInvoicePdf } from "@/lib/invoice/fetchInvoicePdf";
+import { partyStateWarning } from "@/lib/invoice/partyStateWarnings";
 import {
   billToAlignedWithGstin,
   prepareInvoicePayload,
@@ -30,7 +33,7 @@ import {
 } from "@/lib/invoice/billTaxDefaults";
 import { stateNameFromGstCode } from "@/lib/invoice/indianStates";
 import { stateCodeFromGstin } from "@/lib/invoice/gstin";
-import { invoiceSchema, type InvoiceFormInput, type Party } from "@/lib/invoice/schema";
+import { invoiceSchema, type InvoiceFormInput, type LineItem, type Party } from "@/lib/invoice/schema";
 import { applyProfileToInvoice } from "@/lib/profile/applyProfileToInvoice";
 import type { UserProfile } from "@/lib/invoice/userProfile";
 import {
@@ -76,6 +79,9 @@ import {
   Dt,
   Field,
   Form,
+  FormField,
+  FormFieldGroup,
+  FormSection,
   Grid,
   Heading,
   Iframe,
@@ -90,10 +96,11 @@ import {
   Stack,
   Strong,
   Text,
-  TextArea,
+  TextAreaField,
+  TextField,
 } from "@/components/ui";
-import { fieldLabelClass } from "@/components/ui/tokens";
-import { FormSection } from "./FormSection";
+import { InvoiceDateInput } from "./InvoiceDateInput";
+import { useToast } from "@/components/ui/toast";
 import { LineItemsEditor } from "./LineItemsEditor";
 
 function formatInr(n: number) {
@@ -285,7 +292,9 @@ function ReadOnlyBlock({
 }
 
 export function InvoiceForm({ editBillId }: { editBillId?: string }) {
+  const { toast } = useToast();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [draftOffer, setDraftOffer] = useState<InvoiceFormInput | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [updateLoading, setUpdateLoading] = useState(false);
@@ -331,11 +340,32 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
 
   const duplicateInvoiceBlocked = Boolean(duplicateInvoiceMsg);
 
-  const { isDirty } = useFormState({ control });
+  const { isDirty, touchedFields, isSubmitted } = useFormState({ control });
+
+  const fieldError = useCallback(
+    (name: Path<InvoiceFormInput>) =>
+      visibleFieldError(errors, touchedFields, isSubmitted, name),
+    [errors, touchedFields, isSubmitted],
+  );
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty]);
+
   const invoiceNumberWatch = useWatch({ control, name: "invoiceNumber" });
 
   const lineItemsWatch = useWatch({ control, name: "lineItems" });
   const billToWatch = useWatch({ control, name: "billTo" });
+
+  const billToStateWarn = useMemo(
+    () => (billToWatch ? partyStateWarning(billToWatch) : null),
+    [billToWatch],
+  );
   const [
     taxModeWatch,
     gstPercentWatch,
@@ -460,25 +490,23 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
         } else {
           const draft = billOrDraft as InvoiceFormInput | null;
           if (draft) {
-            merged = normalizeLoadedInvoiceForm(
-              applyProfileToInvoice(draft, profile, activeCompanyId),
+            setDraftOffer(
+              normalizeLoadedInvoiceForm(applyProfileToInvoice(draft, profile, activeCompanyId)),
             );
           }
         }
         reset(merged);
-        void trigger();
       } catch (e) {
         setSubmitError(e instanceof Error ? e.message : "Could not load workspace");
         const profile = ensureUserProfileDefaults(DEFAULT_USER_PROFILE);
         const activeCompanyId = profile.defaultCompanyId;
         setWorkspace({ profile, activeCompanyId });
         reset(buildBillFormDefaults(profile, activeCompanyId));
-        void trigger();
       } finally {
         setReady(true);
       }
     })();
-  }, [reset, trigger, editBillId]);
+  }, [reset, editBillId]);
 
   useEffect(() => {
     const onProfile = async () => {
@@ -492,14 +520,13 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
             applyProfileToInvoice(getValues(), profile, activeCompanyId),
           ),
         );
-        void trigger();
       } catch {
         /* ignore */
       }
     };
     window.addEventListener("e-bill-profile-updated", onProfile);
     return () => window.removeEventListener("e-bill-profile-updated", onProfile);
-  }, [reset, getValues, trigger]);
+  }, [reset, getValues]);
 
   useEffect(() => {
     const { unsubscribe } = watch(() => {
@@ -618,14 +645,13 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
       const activeCompanyId = resolveActiveCompanyId(profile, bundle.activeCompanyId);
       setWorkspace({ profile, activeCompanyId });
       reset(buildBillFormDefaults(profile, activeCompanyId));
-      void trigger();
       setSubmitError(null);
       setSuccessMsg(null);
       clearPreview();
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Could not clear draft");
     }
-  }, [reset, trigger, clearPreview]);
+  }, [reset, clearPreview]);
 
   const onChangeIssuer = useCallback(
     async (id: string) => {
@@ -653,8 +679,7 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
         prevCompanyId,
         activeCompanyId,
       );
-      setValue("invoiceNumber", invAligned, { shouldValidate: true });
-      void trigger();
+      setValue("invoiceNumber", invAligned, { shouldValidate: false });
 
       try {
         await saveProfileBundle({
@@ -670,13 +695,12 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
             applyProfileToInvoice(formSnapshot, prevWorkspace.profile, prevWorkspace.activeCompanyId),
           ),
         );
-        void trigger();
         setSubmitError(e instanceof Error ? e.message : "Could not switch company");
       } finally {
         issuerSwitchInFlight.current = false;
       }
     },
-    [workspace, reset, getValues, setValue, trigger],
+    [workspace, reset, getValues, setValue],
   );
 
   const onInvalid = useCallback((errs: FieldErrors<InvoiceFormInput>) => {
@@ -739,13 +763,43 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
           /* recents non-blocking */
         }
         setSuccessMsg("Saved bill updated.");
+        toast("Bill saved", "success");
       } catch (e) {
         setSubmitError(e instanceof Error ? e.message : "Update failed");
+        toast("Update failed", "error");
       } finally {
         setUpdateLoading(false);
       }
     },
     onInvalid,
+  );
+
+  const saveLineToLibrary = useCallback(
+    async (line: LineItem) => {
+      if (!workspace) return;
+      const profile = ensureUserProfileDefaults(workspace.profile);
+      const item = {
+        id: crypto.randomUUID(),
+        description: line.description,
+        hsn: line.hsn,
+        unit: line.unit,
+        rate: line.rate,
+        taxPercent: line.taxPercent,
+      };
+      const saved = [...(profile.savedLineItems ?? [])];
+      const idx = saved.findIndex((s) => s.description === item.description && s.hsn === item.hsn);
+      if (idx >= 0) saved[idx] = item;
+      else saved.unshift(item);
+      const userProfile = { ...profile, savedLineItems: saved.slice(0, 40) };
+      await saveProfileBundle({
+        version: 1,
+        userProfile,
+        activeCompanyId: workspace.activeCompanyId,
+      });
+      setWorkspace({ profile: userProfile, activeCompanyId: workspace.activeCompanyId });
+      toast("Line saved to library", "success");
+    },
+    [workspace, toast],
   );
 
   const onSubmit = handleSubmit(
@@ -795,17 +849,18 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
         setWorkspace({ profile: profileAfterRecents, activeCompanyId });
         const next = formStateForNextBill(profileAfterRecents, activeCompanyId);
         reset(next);
-        void trigger();
         clearPreview();
         setSuccessMsg(
           editBillId
             ? `PDF downloaded and bill ${filename} updated.`
             : `Saved ${filename}. Bill stored; draft cleared for the next invoice.`,
         );
+        toast(editBillId ? "PDF downloaded & bill updated" : "PDF saved & bill stored", "success");
       } catch (e) {
         setSubmitError(
           e instanceof Error ? e.message : "Network error while generating PDF",
         );
+        toast("PDF or save failed", "error");
       } finally {
         setLoading(false);
       }
@@ -824,6 +879,37 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
   return (
     <FormProvider {...methods}>
       <Main className="min-w-0 w-full pb-[calc(9rem+env(safe-area-inset-bottom,0px))] sm:pb-[calc(10rem+env(safe-area-inset-bottom,0px))]">
+        {draftOffer && !editBillId ? (
+          <Banner tone="neutral" role="status" className="mx-3 mb-4 mt-2 sm:mx-4">
+            <Stack gap="sm">
+              <Text className="text-sm">You have an unsaved draft. Resume it or start a new invoice?</Text>
+              <Row gap="sm">
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => {
+                    reset(draftOffer);
+                    setDraftOffer(null);
+                    toast("Draft restored", "success");
+                  }}
+                >
+                  Resume draft
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    void clearDraftRemote();
+                    setDraftOffer(null);
+                    toast("Draft discarded", "info");
+                  }}
+                >
+                  Start fresh
+                </Button>
+              </Row>
+            </Stack>
+          </Banner>
+        ) : null}
         <Grid
           columns="grid-cols-1 lg:grid-cols-[minmax(0,1fr)_19rem]"
           gap="lg"
@@ -897,10 +983,12 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
               leading={<Receipt aria-hidden />}
             >
               <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm">
-                <Field>
-                  <Label htmlFor="invoice-number-suffix" className={fieldLabelClass}>
-                    Invoice no.
-                  </Label>
+                <FormField
+                  label="Invoice no."
+                  required
+                  htmlFor="invoice-number-suffix"
+                  error={fieldError("invoiceNumber")}
+                >
                   <Controller
                     name="invoiceNumber"
                     control={control}
@@ -953,37 +1041,40 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
                   <Text id="invoice-number-prefix-hint" caption className="sr-only">
                     Company prefix to the left is fixed for the selected company; type only the part after the hyphen.
                   </Text>
-                  {errors.invoiceNumber ? (
-                    <Text className="mt-1 text-xs text-red-600">{errors.invoiceNumber.message}</Text>
-                  ) : null}
                   {duplicateInvoiceMsg ? (
                     <Banner tone="warning" role="status" className="mt-2 py-2 text-xs">
                       {duplicateInvoiceMsg}
                     </Banner>
                   ) : null}
-                  <Text
-                    caption
-                    className="mt-0.5 text-[10px] leading-tight"
-                    title="Each saved bill needs a unique number. Prefix (UK-/MH-/…) comes from Profile → Invoice menu for that company."
-                  >
-                    Unique per saved bill · the prefix is fixed from Profile for the company above; only the
-                    part after the hyphen is editable.
-                  </Text>
-                </Field>
-                <Field>
-                  <Label className={fieldLabelClass}>Date</Label>
-                  <Input type="date" {...register("invoiceDate")} />
-                  {errors.invoiceDate ? (
-                    <Text className="mt-1 text-xs text-red-600">{errors.invoiceDate.message}</Text>
-                  ) : null}
-                </Field>
-                <Field className="sm:col-span-2">
-                  <Label className={fieldLabelClass}>Delivery terms</Label>
-                  <Input {...register("deliveryTermsLine")} autoComplete="off" placeholder="As on PDF header" />
-                  {errors.deliveryTermsLine ? (
-                    <Text className="mt-1 text-xs text-red-600">{errors.deliveryTermsLine.message}</Text>
-                  ) : null}
-                </Field>
+                </FormField>
+                <FormField
+                  label="Date"
+                  required
+                  htmlFor="invoice-date-field"
+                  error={fieldError("invoiceDate")}
+                >
+                  <Controller
+                    name="invoiceDate"
+                    control={control}
+                    render={({ field }) => (
+                      <InvoiceDateInput
+                        id="invoice-date-field"
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                      />
+                    )}
+                  />
+                </FormField>
+                <TextField
+                  label="Delivery terms"
+                  optional
+                  className="sm:col-span-2"
+                  error={fieldError("deliveryTermsLine")}
+                  autoComplete="off"
+                  placeholder="As on PDF header"
+                  {...register("deliveryTermsLine")}
+                />
               </Grid>
             </FormSection>
           </Stack>
@@ -1047,133 +1138,133 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
             right, or enter details below.
           </Text>
 
-          <Box className="mb-4">
-            <Text className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-              Purchaser &amp; purchase order
-            </Text>
-            <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm">
-              <Field>
-                <Label className={fieldLabelClass}>Purchaser name</Label>
-                <Input
-                  id="billto-purchaser-field"
-                  {...register("purchaserName")}
-                  autoComplete="off"
-                  placeholder="Shown as Purchaser Name on PDF"
-                />
-                {errors.purchaserName ? (
-                  <Text className="mt-1 text-xs text-red-600">{errors.purchaserName.message}</Text>
-                ) : null}
-              </Field>
-              <Field>
-                <Label className={fieldLabelClass}>Mobile (optional)</Label>
-                <Input {...register("billTo.mobile")} inputMode="tel" autoComplete="tel" />
-              </Field>
-              <Field>
-                <Label className={fieldLabelClass}>Purchase order no.</Label>
-                <Input {...register("poNumber")} placeholder="e.g. PO-2025-0142" autoComplete="off" />
-                {errors.poNumber ? (
-                  <Text className="mt-1 text-xs text-red-600">{errors.poNumber.message}</Text>
-                ) : null}
-              </Field>
-              <Field>
-                <Label className={fieldLabelClass}>Purchase order date</Label>
-                <Input type="date" {...register("purchaseOrderDate")} />
-                {errors.purchaseOrderDate ? (
-                  <Text className="mt-1 text-xs text-red-600">{errors.purchaseOrderDate.message}</Text>
-                ) : null}
-              </Field>
-            </Grid>
-            <Text caption className="mt-2 text-[10px] leading-snug text-zinc-500">
-              If purchaser name is blank, the billed-to name below is used on the PDF.
-            </Text>
-          </Box>
+          <FormFieldGroup title="Purchaser & purchase order">
+            <TextField
+              label="Purchaser name"
+              required
+              id="billto-purchaser-field"
+              error={fieldError("purchaserName")}
+              autoComplete="organization"
+              placeholder="Purchaser on PDF"
+              {...register("purchaserName")}
+            />
+            <TextField
+              label="Mobile"
+              optional
+              {...register("billTo.mobile")}
+              inputMode="tel"
+              autoComplete="tel"
+            />
+            <TextField
+              label="Purchase order no."
+              error={fieldError("poNumber")}
+              placeholder="e.g. PO-2025-0142"
+              autoComplete="off"
+              {...register("poNumber")}
+            />
+            <FormField
+              label="Purchase order date"
+              optional
+              htmlFor="purchase-order-date-field"
+              error={fieldError("purchaseOrderDate")}
+            >
+              <Controller
+                name="purchaseOrderDate"
+                control={control}
+                render={({ field }) => (
+                  <InvoiceDateInput
+                    id="purchase-order-date-field"
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                  />
+                )}
+              />
+            </FormField>
+          </FormFieldGroup>
 
-          <Box className="mb-4 border-t border-zinc-100 pt-4">
-            <Text className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-              Billed to — name &amp; address
-            </Text>
-            <Grid columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" gap="sm">
-              <Field className="sm:col-span-2 lg:col-span-4">
-                <Label className={fieldLabelClass}>Billed to company name</Label>
-                <Input id="billto-name-field" {...register("billTo.name")} />
-                {errors.billTo?.name ? (
-                  <Text className="mt-1 text-xs text-red-600">{errors.billTo.name.message}</Text>
-                ) : null}
-              </Field>
-              <Field className="sm:col-span-2 lg:col-span-4">
-                <Label className={fieldLabelClass}>Address</Label>
-                <TextArea rows={2} {...register("billTo.address")} />
-                {errors.billTo?.address ? (
-                  <Text className="mt-1 text-xs text-red-600">{errors.billTo.address.message}</Text>
-                ) : null}
-              </Field>
-              <Field className="sm:col-span-1 lg:col-span-2">
-                <Label className={fieldLabelClass}>Pincode</Label>
-                <Input
-                  {...register("billTo.pincode")}
-                  maxLength={6}
-                  inputMode="numeric"
-                  autoComplete="postal-code"
-                  placeholder="e.g. 248013"
-                />
-                {errors.billTo?.pincode ? (
-                  <Text className="mt-1 text-xs text-red-600">{errors.billTo.pincode.message}</Text>
-                ) : null}
-              </Field>
-              <Field className="sm:col-span-1 lg:col-span-2">
-                <Label className={fieldLabelClass}>City (optional)</Label>
-                <Input {...register("billTo.city")} autoComplete="address-level2" />
-              </Field>
-            </Grid>
-          </Box>
+          <FormFieldGroup
+            title="Billed to — name & address"
+            bordered
+            gridClassName="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            <TextField
+              label="Billed to company name"
+              required
+              className="sm:col-span-2 lg:col-span-4"
+              id="billto-name-field"
+              error={fieldError("billTo.name")}
+              {...register("billTo.name")}
+            />
+            <TextAreaField
+              label="Address"
+              required
+              className="sm:col-span-2 lg:col-span-4"
+              rows={2}
+              error={fieldError("billTo.address")}
+              {...register("billTo.address")}
+            />
+            <TextField
+              label="Pincode"
+              required
+              className="sm:col-span-1 lg:col-span-2"
+              error={fieldError("billTo.pincode")}
+              maxLength={6}
+              inputMode="numeric"
+              autoComplete="postal-code"
+              placeholder="e.g. 248013"
+              {...register("billTo.pincode")}
+            />
+            <TextField
+              label="City"
+              optional
+              className="sm:col-span-1 lg:col-span-2"
+              autoComplete="address-level2"
+              {...register("billTo.city")}
+            />
+          </FormFieldGroup>
 
-          <Box className="mb-4 border-t border-zinc-100 pt-4">
-            <Text className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-              GST &amp; state
-            </Text>
-            <Grid columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" gap="sm">
-              <Field className="lg:col-span-2">
-                <Label className={fieldLabelClass}>GSTIN</Label>
-                <Input {...register("billTo.gstin")} maxLength={15} inputMode="text" autoCapitalize="characters" />
-                {errors.billTo?.gstin ? (
-                  <Text className="mt-1 text-xs text-red-600">{errors.billTo.gstin.message}</Text>
-                ) : null}
-                <Text caption className="mt-1 text-[10px] leading-snug text-zinc-500">
-                  15 characters with valid checksum; state code updates from the first two digits.
-                </Text>
-              </Field>
-              <Field className="lg:col-span-2">
-                <Label className={fieldLabelClass}>PAN (optional)</Label>
-                <Input {...register("billTo.pan")} maxLength={10} autoCapitalize="characters" />
-                {errors.billTo?.pan ? (
-                  <Text className="mt-1 text-xs text-red-600">{errors.billTo.pan.message}</Text>
-                ) : null}
-                <Text caption className="mt-1 text-[10px] leading-snug text-zinc-500">
-                  Shown under purchaser name on the PDF when provided.
-                </Text>
-              </Field>
-              <Field className="lg:col-span-2">
-                <Label className={fieldLabelClass}>State</Label>
-                <Input {...register("billTo.stateName")} />
-                {errors.billTo?.stateName ? (
-                  <Text className="mt-1 text-xs text-red-600">{errors.billTo.stateName.message}</Text>
-                ) : null}
-              </Field>
-              <Field className="lg:col-span-2">
-                <Label className={fieldLabelClass}>State code</Label>
-                <Input {...register("billTo.stateCode")} maxLength={2} inputMode="numeric" />
-                {errors.billTo?.stateCode ? (
-                  <Text className="mt-1 text-xs text-red-600">{errors.billTo.stateCode.message}</Text>
-                ) : null}
-              </Field>
-            </Grid>
-          </Box>
+          <FormFieldGroup title="GST & state" bordered gridClassName="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            <TextField
+              label="GSTIN"
+              required
+              className="lg:col-span-2"
+              error={fieldError("billTo.gstin")}
+              maxLength={15}
+              inputMode="text"
+              autoCapitalize="characters"
+              hint={billToStateWarn ? <span className="text-amber-700">{billToStateWarn}</span> : undefined}
+              {...register("billTo.gstin")}
+            />
+            <TextField
+              label="PAN"
+              optional
+              className="lg:col-span-2"
+              error={fieldError("billTo.pan")}
+              maxLength={10}
+              autoCapitalize="characters"
+              {...register("billTo.pan")}
+            />
+            <TextField
+              label="State"
+              required
+              className="lg:col-span-2"
+              error={fieldError("billTo.stateName")}
+              {...register("billTo.stateName")}
+            />
+            <TextField
+              label="State code"
+              required
+              className="lg:col-span-2"
+              error={fieldError("billTo.stateCode")}
+              maxLength={2}
+              inputMode="numeric"
+              {...register("billTo.stateCode")}
+            />
+          </FormFieldGroup>
 
           <Box className="border-t border-zinc-100 pt-4">
-            <Field className="max-w-md">
-              <Label className={fieldLabelClass}>Kind attention (optional)</Label>
-              <Input {...register("billTo.kindAttn")} />
-            </Field>
+            <TextField label="Kind attention" optional className="max-w-md" {...register("billTo.kindAttn")} />
           </Box>
         </FormSection>
 
@@ -1217,22 +1308,19 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
                 </Label>
               </Row>
             </Field>
-            <Field>
-              <Label className={fieldLabelClass}>Other charges (₹)</Label>
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                {...register("extraCharges", { valueAsNumber: true })}
-              />
-              {errors.extraCharges ? (
-                <Text className="mt-1 text-xs text-red-600">{errors.extraCharges.message}</Text>
-              ) : null}
-            </Field>
-            <Field>
-              <Label className={fieldLabelClass}>Other charges label</Label>
-              <Input {...register("extraChargesLabel")} placeholder="Other charges" />
-            </Field>
+            <TextField
+              label="Other charges (₹)"
+              type="number"
+              min={0}
+              step="0.01"
+              error={fieldError("extraCharges")}
+              {...register("extraCharges", { valueAsNumber: true })}
+            />
+            <TextField
+              label="Other charges label"
+              placeholder="Other charges"
+              {...register("extraChargesLabel")}
+            />
           </Grid>
         </FormSection>
 
@@ -1256,51 +1344,31 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
             </Label>
           </Row>
           {!shipSame ? (
-            <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm">
-              <Field className="sm:col-span-2">
-                <Label className={fieldLabelClass}>Name</Label>
-                <Input {...register("shipTo.name")} />
-              </Field>
-              <Field className="sm:col-span-2">
-                <Label className={fieldLabelClass}>Address</Label>
-                <TextArea rows={2} {...register("shipTo.address")} />
-              </Field>
-              <Field>
-                <Label className={fieldLabelClass}>GSTIN</Label>
-                <Input {...register("shipTo.gstin")} maxLength={15} autoCapitalize="characters" />
-                <Text caption className="mt-1 text-[10px] leading-snug text-zinc-500">
-                  Use the ship-to party&apos;s GSTIN when goods are delivered to a different registered entity.
-                </Text>
-              </Field>
-              <Field>
-                <Label className={fieldLabelClass}>Pincode</Label>
-                <Input
-                  {...register("shipTo.pincode")}
-                  maxLength={6}
-                  inputMode="numeric"
-                  autoComplete="postal-code"
-                  placeholder="e.g. 400001"
-                />
-                {errors.shipTo?.pincode ? (
-                  <Text className="mt-1 text-xs text-red-600">{errors.shipTo.pincode.message}</Text>
-                ) : null}
-              </Field>
-              <Field>
-                <Label className={fieldLabelClass}>City (optional)</Label>
-                <Input {...register("shipTo.city")} autoComplete="address-level2" />
-              </Field>
-              <Field>
-                <Label className={fieldLabelClass}>State</Label>
-                <Input {...register("shipTo.stateName")} />
-              </Field>
-              <Field>
-                <Label className={fieldLabelClass}>State code</Label>
-                <Input {...register("shipTo.stateCode")} maxLength={2} />
-              </Field>
-              {errors.shipTo ? (
-                <Text className="sm:col-span-2 text-sm text-red-600">{errors.shipTo.message}</Text>
+            <FormFieldGroup gridClassName="grid-cols-1 sm:grid-cols-2">
+              <TextField label="Name" className="sm:col-span-2" {...register("shipTo.name")} />
+              <TextAreaField label="Address" className="sm:col-span-2" rows={2} {...register("shipTo.address")} />
+              <TextField
+                label="GSTIN"
+                maxLength={15}
+                autoCapitalize="characters"
+                {...register("shipTo.gstin")}
+              />
+              <TextField
+                label="Pincode"
+                error={fieldError("shipTo.pincode")}
+                maxLength={6}
+                inputMode="numeric"
+                autoComplete="postal-code"
+                placeholder="e.g. 400001"
+                {...register("shipTo.pincode")}
+              />
+              <TextField label="City" optional autoComplete="address-level2" {...register("shipTo.city")} />
+              <TextField label="State" {...register("shipTo.stateName")} />
+              <TextField label="State code" maxLength={2} {...register("shipTo.stateCode")} />
+              {fieldError("shipTo") ? (
+                <Text className="sm:col-span-2 text-sm text-red-600">{fieldError("shipTo")}</Text>
               ) : null}
-            </Grid>
+            </FormFieldGroup>
           ) : null}
         </FormSection>
 
@@ -1313,43 +1381,35 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
           <Text caption className="mb-3 text-[11px] leading-snug text-zinc-600">
             These appear in the top block of the downloaded PDF (transporter, waybill, others, hypothecation).
           </Text>
-          <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm">
-            <Field>
-              <Label className={fieldLabelClass}>Name of transporter</Label>
-              <Input {...register("transport")} autoComplete="off" />
-            </Field>
-            <Field>
-              <Label className={fieldLabelClass}>L.R. no. &amp; date</Label>
-              <Input {...register("lrNumberAndDate")} autoComplete="off" placeholder="e.g. LR-102 / 2025-05-01" />
-            </Field>
-            <Field>
-              <Label className={fieldLabelClass}>Vehicle no.</Label>
-              <Input {...register("vehicle")} autoComplete="off" />
-            </Field>
-            <Field>
-              <Label className={fieldLabelClass}>Way bill no.</Label>
-              <Input {...register("eWayBill")} autoComplete="off" />
-            </Field>
-            <Field>
-              <Label className={fieldLabelClass}>Destination (optional)</Label>
-              <Input {...register("destination")} autoComplete="off" />
-            </Field>
-            <Field>
-              <Label className={fieldLabelClass}>Others</Label>
-              <Input {...register("otherMeta")} autoComplete="off" placeholder="Shown as “Others” on PDF" />
-              <Text caption className="mt-1 text-[10px] leading-snug text-zinc-500">
-                If blank, destination is used on the PDF.
-              </Text>
-            </Field>
-            <Field className="sm:col-span-2">
-              <Label className={fieldLabelClass}>Delivery note (optional)</Label>
-              <Input {...register("deliveryNote")} autoComplete="off" />
-            </Field>
-            <Field className="sm:col-span-2">
-              <Label className={fieldLabelClass}>Hypothecation</Label>
-              <Input {...register("hypothecation")} autoComplete="off" placeholder="Shown below bill-to on PDF" />
-            </Field>
-          </Grid>
+          <FormFieldGroup gridClassName="grid-cols-1 sm:grid-cols-2">
+            <TextField label="Name of transporter" optional autoComplete="off" {...register("transport")} />
+            <TextField
+              label="L.R. no. & date"
+              optional
+              autoComplete="off"
+              placeholder="e.g. LR-102 / 2025-05-01"
+              {...register("lrNumberAndDate")}
+            />
+            <TextField label="Vehicle no." optional autoComplete="off" {...register("vehicle")} />
+            <TextField label="Way bill no." optional autoComplete="off" {...register("eWayBill")} />
+            <TextField label="Destination" optional autoComplete="off" {...register("destination")} />
+            <TextField
+              label="Others"
+              optional
+              autoComplete="off"
+              placeholder='Shown as "Others" on PDF'
+              {...register("otherMeta")}
+            />
+            <TextField label="Delivery note" optional className="sm:col-span-2" autoComplete="off" {...register("deliveryNote")} />
+            <TextField
+              label="Hypothecation"
+              optional
+              className="sm:col-span-2"
+              autoComplete="off"
+              placeholder="Shown below bill-to on PDF"
+              {...register("hypothecation")}
+            />
+          </FormFieldGroup>
         </FormSection>
 
         <FormSection
@@ -1358,27 +1418,31 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
           dense
           leading={<FileText aria-hidden />}
         >
-          <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm">
-            <Field className="sm:col-span-2">
-              <Label className={fieldLabelClass}>IRN</Label>
-              <Input {...register("eInvoice.irn")} autoComplete="off" />
-              {errors.eInvoice?.irn ? (
-                <Text className="mt-1 text-xs text-red-600">{errors.eInvoice.irn.message}</Text>
-              ) : null}
-            </Field>
-            <Field>
-              <Label className={fieldLabelClass}>Ack no.</Label>
-              <Input {...register("eInvoice.ackNumber")} autoComplete="off" />
-            </Field>
-            <Field>
-              <Label className={fieldLabelClass}>Ack date</Label>
-              <Input {...register("eInvoice.ackDate")} autoComplete="off" placeholder="YYYY-MM-DD" />
-            </Field>
-          </Grid>
+          <FormFieldGroup gridClassName="grid-cols-1 sm:grid-cols-2">
+            <TextField
+              label="IRN"
+              optional
+              className="sm:col-span-2"
+              error={fieldError("eInvoice.irn")}
+              autoComplete="off"
+              {...register("eInvoice.irn")}
+            />
+            <TextField label="Ack no." optional autoComplete="off" {...register("eInvoice.ackNumber")} />
+            <TextField
+              label="Ack date"
+              optional
+              autoComplete="off"
+              placeholder="31/May/2026"
+              {...register("eInvoice.ackDate")}
+            />
+          </FormFieldGroup>
         </FormSection>
 
         <FormSection id="section-lines" title="Line items" dense leading={<ListOrdered aria-hidden />}>
-          <LineItemsEditor />
+          <LineItemsEditor
+            savedLineItems={workspace.profile.savedLineItems ?? []}
+            onSaveLineToLibrary={saveLineToLibrary}
+          />
         </FormSection>
 
         <Section

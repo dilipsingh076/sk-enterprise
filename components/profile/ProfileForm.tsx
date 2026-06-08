@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Controller, FormProvider, useForm, useWatch, type Resolver } from "react-hook-form";
-import { FormSection } from "@/components/invoice/FormSection";
+import { FormSection } from "@/components/ui";
 import { CompanyPresetEditor } from "@/components/profile/CompanyPresetEditor";
 import {
   AppLink,

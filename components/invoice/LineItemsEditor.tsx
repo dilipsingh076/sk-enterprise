@@ -4,11 +4,14 @@ import { Copy, Trash2 } from "lucide-react";
 import { memo, useMemo } from "react";
 import {
   Controller,
+  get,
   useFieldArray,
   useFormContext,
+  useFormState,
   useWatch,
   type UseFieldArrayRemove,
 } from "react-hook-form";
+import { visibleFieldError } from "@/lib/form/visibleFieldError";
 import {
   Box,
   Button,
@@ -41,6 +44,7 @@ import {
 } from "@/lib/invoice/indianGstRates";
 import { getLineItemUnitOptions } from "@/lib/invoice/lineItemUnits";
 import type { InvoiceFormInput, LineItem } from "@/lib/invoice/schema";
+import type { SavedLineItem } from "@/lib/invoice/userProfile";
 
 function formatAmt(n: number) {
   return n.toLocaleString("en-IN", {
@@ -95,6 +99,7 @@ type LineItemRowProps = {
   taxMode: "IGST" | "CGST_SGST";
   remove: UseFieldArrayRemove;
   onDuplicate: (index: number) => void;
+  onSaveLineToLibrary?: (line: LineItem) => void | Promise<void>;
 };
 
 const LineItemRow = memo(function LineItemRow({
@@ -104,12 +109,14 @@ const LineItemRow = memo(function LineItemRow({
   taxMode,
   remove,
   onDuplicate,
+  onSaveLineToLibrary,
 }: LineItemRowProps) {
   const {
     control,
     register,
     formState: { errors },
   } = useFormContext<InvoiceFormInput>();
+  const { touchedFields, isSubmitted } = useFormState({ control });
 
   const line = useWatch({ control, name: `lineItems.${index}` });
   const amounts = useMemo(() => {
@@ -123,6 +130,9 @@ const LineItemRow = memo(function LineItemRow({
   }, [line, taxMode, invoiceGstPercent]);
 
   const rowErrors = errors.lineItems?.[index];
+  const rowTouched = isSubmitted || Boolean(get(touchedFields, `lineItems.${index}`));
+  const cellError = (name: "description" | "hsn" | "quantity" | "unit" | "rate" | "taxPercent") =>
+    rowTouched ? rowErrors?.[name]?.message : undefined;
   const zebra = index % 2 === 1;
   const rowBg = zebra ? "bg-zinc-50/90" : "bg-white";
   const stickyCellBg = zebra ? "bg-zinc-50/98" : "bg-white/98";
@@ -139,7 +149,7 @@ const LineItemRow = memo(function LineItemRow({
           className={cn(cellInput, "min-h-[1.75rem] resize-y")}
           placeholder="Description"
         />
-        <CellError message={rowErrors?.description?.message} />
+        <CellError message={cellError("description")} />
       </Td>
       <Td className={tdBase}>
         <Input
@@ -149,7 +159,7 @@ const LineItemRow = memo(function LineItemRow({
           maxLength={12}
           placeholder="HSN"
         />
-        <CellError message={rowErrors?.hsn?.message} />
+        <CellError message={cellError("hsn")} />
       </Td>
       <Td className={tdBase}>
         <Input
@@ -159,7 +169,7 @@ const LineItemRow = memo(function LineItemRow({
           {...register(`lineItems.${index}.quantity`, numField)}
           className={numInput}
         />
-        <CellError message={rowErrors?.quantity?.message} />
+        <CellError message={cellError("quantity")} />
       </Td>
       <Td className={tdBase}>
         <Controller
@@ -182,7 +192,7 @@ const LineItemRow = memo(function LineItemRow({
             </Select>
           )}
         />
-        <CellError message={rowErrors?.unit?.message} />
+        <CellError message={cellError("unit")} />
       </Td>
       <Td className={tdBase}>
         <Input
@@ -192,7 +202,7 @@ const LineItemRow = memo(function LineItemRow({
           {...register(`lineItems.${index}.rate`, numField)}
           className={numInput}
         />
-        <CellError message={rowErrors?.rate?.message} />
+        <CellError message={cellError("rate")} />
       </Td>
       <Td className={amtCellClass}>{formatAmt(amounts.gross)}</Td>
       <Td className={tdBase}>
@@ -222,12 +232,24 @@ const LineItemRow = memo(function LineItemRow({
             </Select>
           )}
         />
-        <CellError message={rowErrors?.taxPercent?.message} />
+        <CellError message={cellError("taxPercent")} />
       </Td>
       <Td className={amtCellClass}>{formatAmt(amounts.tax)}</Td>
       <Td className={cn(amtCellClass, "font-semibold")}>{formatAmt(amounts.total)}</Td>
       <Td className={cn(tdBase, "text-center")}>
         <Row className="items-center justify-center gap-0.5" gap="none">
+          {onSaveLineToLibrary ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={cn(iconActionClass, "border-zinc-300 text-zinc-800 hover:bg-zinc-50")}
+              onClick={() => void onSaveLineToLibrary((line ?? {}) as LineItem)}
+              aria-label={`Save line ${index + 1} to library`}
+              title="Save to line library"
+            >
+              <Span className="text-[9px] font-bold">+</Span>
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"
@@ -255,12 +277,19 @@ const LineItemRow = memo(function LineItemRow({
   );
 });
 
-export function LineItemsEditor() {
+type LineItemsEditorProps = {
+  savedLineItems?: SavedLineItem[];
+  onSaveLineToLibrary?: (line: LineItem) => void | Promise<void>;
+};
+
+export function LineItemsEditor({ savedLineItems = [], onSaveLineToLibrary }: LineItemsEditorProps) {
   const {
     control,
     getValues,
     formState: { errors },
   } = useFormContext<InvoiceFormInput>();
+  const { touchedFields, isSubmitted } = useFormState({ control });
+  const lineItemsError = visibleFieldError(errors, touchedFields, isSubmitted, "lineItems");
   const { fields, append, remove, insert } = useFieldArray({
     control,
     name: "lineItems",
@@ -276,9 +305,44 @@ export function LineItemsEditor() {
     insert(index + 1, { ...row });
   };
 
+  const appendTemplate = (tpl: SavedLineItem) => {
+    append({
+      description: tpl.description,
+      hsn: tpl.hsn,
+      quantity: 1,
+      unit: tpl.unit,
+      rate: tpl.rate,
+      discountKind: "AMOUNT",
+      discount: 0,
+      taxPercent: coerceIndianGstRate(tpl.taxPercent ?? invoiceGstPercent),
+    });
+  };
+
   return (
     <Stack gap="sm">
-      <Box className="flex justify-end">
+      <Row className="flex-wrap justify-end" gap="sm">
+        {savedLineItems.length > 0 ? (
+          <Select
+            value=""
+            variant="compact"
+            className="min-w-[10rem]"
+            aria-label="Add line from saved library"
+            onChange={(e) => {
+              const id = e.target.value;
+              if (!id) return;
+              const tpl = savedLineItems.find((s) => s.id === id);
+              if (tpl) appendTemplate(tpl);
+              e.target.value = "";
+            }}
+          >
+            <Option value="">From library…</Option>
+            {savedLineItems.map((s) => (
+              <Option key={s.id} value={s.id}>
+                {s.description.slice(0, 36)}
+              </Option>
+            ))}
+          </Select>
+        ) : null}
         <Button
           type="button"
           variant="secondary"
@@ -297,7 +361,7 @@ export function LineItemsEditor() {
         >
           Add line
         </Button>
-      </Box>
+      </Row>
       {fields.length === 0 ? (
         <Text className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-4 py-5 text-center text-sm text-zinc-800">
           No line items yet. Use <Span className="font-semibold text-zinc-950">Add line</Span> to start.
@@ -349,15 +413,14 @@ export function LineItemsEditor() {
                   taxMode={taxMode}
                   remove={remove}
                   onDuplicate={onDuplicate}
+                  onSaveLineToLibrary={onSaveLineToLibrary}
                 />
               ))}
             </Tbody>
           </Table>
         </Box>
       )}
-      {errors.lineItems && typeof errors.lineItems.message === "string" ? (
-        <Text className="text-sm text-red-600">{errors.lineItems.message}</Text>
-      ) : null}
+      {lineItemsError ? <Text className="text-sm text-red-600">{lineItemsError}</Text> : null}
     </Stack>
   );
 }

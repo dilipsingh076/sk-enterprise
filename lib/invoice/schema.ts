@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { clampPercent } from "@/lib/invoice/calculations";
+import {
+  isValidInvoiceDate,
+  normalizeInvoiceDateStorage,
+} from "@/lib/invoice/formatInvoiceDate";
 import { coerceIndianGstRate } from "@/lib/invoice/indianGstRates";
 import {
   GSTIN_FORMAT_REGEX,
@@ -196,13 +199,9 @@ export const invoiceSchema = z
       .string()
       .min(1, "Date required")
       .transform(trimStr)
-      .refine((s) => /^\d{4}-\d{2}-\d{2}$/.test(s), "Use YYYY-MM-DD")
-      .refine((s) => {
-        const [y, m, d] = s.split("-").map(Number);
-        if (!y || !m || !d) return false;
-        const dt = new Date(y, m - 1, d);
-        return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
-      }, "Invalid calendar date"),
+      .transform(normalizeInvoiceDateStorage)
+      .refine((s) => s.length > 0, "Date required")
+      .refine(isValidInvoiceDate, "Use dd/Mon/yyyy e.g. 31/May/2026"),
     placeOfSupplyState: z
       .string()
       .min(1, "Required")
@@ -219,8 +218,16 @@ export const invoiceSchema = z
     poNumber: z.string().optional(),
     deliveryNote: z.string().optional(),
     destination: z.string().optional(),
-    purchaserName: z.string().optional(),
-    purchaseOrderDate: z.string().optional(),
+    purchaserName: z
+      .string()
+      .min(1, "Required")
+      .transform(trimStr)
+      .refine((s) => s.length > 0, "Required"),
+    purchaseOrderDate: z
+      .string()
+      .default("")
+      .transform(normalizeInvoiceDateStorage)
+      .refine((s) => !s || isValidInvoiceDate(s), "Use dd/Mon/yyyy e.g. 31/May/2026"),
     deliveryTermsLine: z.string().optional(),
     hypothecation: z.string().optional(),
     lrNumberAndDate: z.string().optional(),

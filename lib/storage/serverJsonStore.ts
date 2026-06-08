@@ -2,12 +2,14 @@ import fs from "fs/promises";
 import path from "path";
 import { get, put } from "@vercel/blob";
 import { z } from "zod";
-import { invoiceSchema } from "@/lib/invoice/schema";
 import { userProfileSchema } from "@/lib/invoice/userProfile";
+import { billsFileSchema, type BillsFile } from "@/lib/storage/billSchemas";
+import { recoverBillsFileFromRaw } from "@/lib/storage/migrateStoredBill";
 import {
   DEFAULT_USER_PROFILE,
   ensureUserProfileDefaults,
   normalizeStoredUserProfile,
+  resolveActiveCompanyId,
 } from "@/lib/profile/profileStorage";
 
 const BLOB_PREFIX = "e-bill-data";
@@ -92,6 +94,13 @@ async function readJson(name: string): Promise<unknown | null> {
   if (blobStorageEnabled()) {
     return readJsonBlob(name);
   }
+  if (isVercel()) {
+    console.error(
+      `[storage] BLOB_READ_WRITE_TOKEN is not set on Vercel; ${name} will read as empty. ` +
+        "Add the token in Project Settings → Environment Variables, then redeploy.",
+    );
+    return null;
+  }
   return readJsonFs(name);
 }
 
@@ -116,23 +125,7 @@ export const profileBundleSchema = z.object({
 
 export type ProfileBundle = z.infer<typeof profileBundleSchema>;
 
-export const billRecordSchema = z.object({
-  id: z.string().min(1),
-  createdAt: z.string().min(1),
-  updatedAt: z.string().min(1),
-  /** Short label for list (e.g. invoice no. + buyer) */
-  title: z.string().optional(),
-  invoice: invoiceSchema,
-});
-
-export type BillRecord = z.infer<typeof billRecordSchema>;
-
-const billsFileSchema = z.object({
-  version: z.literal(1),
-  bills: z.array(billRecordSchema),
-});
-
-export type BillsFile = z.infer<typeof billsFileSchema>;
+export { billRecordSchema, billsFileSchema, type BillRecord, type BillsFile } from "@/lib/storage/billSchemas";
 
 export function defaultProfileBundle(): ProfileBundle {
   const userProfile = ensureUserProfileDefaults(DEFAULT_USER_PROFILE);
@@ -153,11 +146,15 @@ export async function readProfileBundle(): Promise<ProfileBundle> {
       userProfile: ensureUserProfileDefaults(parsed.data.userProfile),
     };
   }
-  const userProfile = normalizeStoredUserProfile(raw);
+  const row = raw as { userProfile?: unknown; activeCompanyId?: string };
+  const userProfile = normalizeStoredUserProfile(row.userProfile ?? raw);
   return {
     version: 1,
     userProfile: ensureUserProfileDefaults(userProfile),
-    activeCompanyId: userProfile.defaultCompanyId,
+    activeCompanyId: resolveActiveCompanyId(
+      userProfile,
+      typeof row.activeCompanyId === "string" ? row.activeCompanyId : undefined,
+    ),
   };
 }
 
@@ -180,9 +177,38 @@ export async function clearDraftFile(): Promise<void> {
 
 export async function readBillsFile(): Promise<BillsFile> {
   const raw = await readJson(FILE_BILLS);
-  const parsed = billsFileSchema.safeParse(raw);
-  if (parsed.success) return parsed.data;
-  return { version: 1, bills: [] };
+  if (raw == null) return { version: 1, bills: [] };
+
+  const strict = billsFileSchema.safeParse(raw);
+  if (strict.success) return strict.data;
+
+  const looseCount = Array.isArray((raw as { bills?: unknown }).bills)
+    ? (raw as { bills: unknown[] }).bills.length
+    : 0;
+  const recovered = recoverBillsFileFromRaw(raw);
+
+  if (looseCount > 0 && recovered.bills.length === looseCount) {
+    console.warn(
+      `[storage] Migrated all ${recovered.bills.length} saved bill(s); updating ${FILE_BILLS}.`,
+    );
+    try {
+      await writeBillsFile(recovered);
+    } catch (e) {
+      console.error("[storage] Failed to persist migrated bills:", e);
+    }
+  } else if (looseCount > 0 && recovered.bills.length === 0) {
+    console.error(
+      `[storage] ${FILE_BILLS} contains ${looseCount} bill(s) that could not be migrated. ` +
+        "Storage was not cleared; export a backup before redeploying.",
+    );
+  } else if (looseCount > 0) {
+    console.error(
+      `[storage] Only ${recovered.bills.length}/${looseCount} bill(s) could be migrated. ` +
+        `${FILE_BILLS} was not overwritten.`,
+    );
+  }
+
+  return recovered;
 }
 
 export async function writeBillsFile(file: BillsFile): Promise<void> {

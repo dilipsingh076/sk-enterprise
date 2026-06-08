@@ -1,4 +1,5 @@
 import { computeInvoiceTotals } from "@/lib/invoice/calculations";
+import { normalizeInvoiceDateStorage } from "@/lib/invoice/formatInvoiceDate";
 import { stateNameFromGstCode } from "@/lib/invoice/indianStates";
 import { coerceIndianGstRate } from "@/lib/invoice/indianGstRates";
 import type { InvoiceFormInput, Party, Seller } from "@/lib/invoice/schema";
@@ -104,21 +105,15 @@ function computedRoundOff(data: InvoiceFormInput): number {
   ).roundOff;
 }
 
-/** Purchaser on PDF header; falls back to bill-to name when empty. */
-export function resolvePurchaserName(data: InvoiceFormInput): string {
-  const explicit = data.purchaserName?.trim();
-  if (explicit) return explicit;
-  return data.billTo.name?.trim() ?? "";
-}
-
 /** Final invoice payload: align bill-to with GSTIN, then derive PoS and tax mode. */
 export function prepareInvoicePayload(data: InvoiceFormInput): InvoiceFormInput {
   const billTo = billToAlignedWithGstin(data.billTo);
-  const purchaserName = resolvePurchaserName({ ...data, billTo });
   const synced = syncInvoiceTaxFields({
     ...data,
     billTo,
-    purchaserName,
+    purchaserName: data.purchaserName.trim(),
+    invoiceDate: normalizeInvoiceDateStorage(data.invoiceDate),
+    purchaseOrderDate: normalizeInvoiceDateStorage(data.purchaseOrderDate),
   });
   return { ...synced, roundOff: computedRoundOff(synced) };
 }

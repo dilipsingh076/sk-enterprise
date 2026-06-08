@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { invoiceSchema } from "@/lib/invoice/schema";
+import { migrateStoredInvoice } from "@/lib/storage/migrateStoredBill";
 import { clearDraftFile, readDraft, writeDraft } from "@/lib/storage/serverJsonStore";
 
 export async function GET() {
@@ -7,6 +8,10 @@ export async function GET() {
     const raw = await readDraft();
     if (raw == null) {
       return NextResponse.json({ draft: null });
+    }
+    const migrated = migrateStoredInvoice(raw);
+    if (migrated) {
+      return NextResponse.json({ draft: migrated });
     }
     const parsed = invoiceSchema.safeParse(raw);
     return NextResponse.json({ draft: parsed.success ? parsed.data : null });

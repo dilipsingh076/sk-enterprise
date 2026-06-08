@@ -51,6 +51,7 @@ export async function POST(req: Request) {
         amountWords={amountWords}
         taxAmountWords={taxAmountWords}
         logoSrc={logoSrc ?? undefined}
+        showDraftWatermark={isPreview}
       />,
     );
   } catch (e) {
@@ -60,9 +61,9 @@ export async function POST(req: Request) {
   }
 
   const safeNo = invoice.invoiceNumber.replace(/[^\w.\-]+/g, "_");
-  const disposition = isPreview
-    ? `inline; filename="Invoice-${safeNo}.pdf"`
-    : `attachment; filename="Invoice-${safeNo}.pdf"`;
+  const safeBuyer = invoice.billTo.name.replace(/[^\w.\-]+/g, "_").slice(0, 40);
+  const filename = `Invoice-${safeNo}-${safeBuyer}.pdf`;
+  const disposition = isPreview ? `inline; filename="${filename}"` : `attachment; filename="${filename}"`;
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {

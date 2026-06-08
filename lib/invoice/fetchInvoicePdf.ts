@@ -41,6 +41,7 @@ export async function fetchInvoicePdf(
   const blob = await res.blob();
   const cd = res.headers.get("Content-Disposition");
   const match = cd?.match(/filename="?([^";]+)"?/i);
-  const filename = match?.[1] ?? `Invoice-${payload.invoiceNumber}.pdf`;
+  const safeBuyer = payload.billTo.name.replace(/[^\w.\-]+/g, "_").slice(0, 40);
+  const filename = match?.[1] ?? `Invoice-${payload.invoiceNumber}-${safeBuyer}.pdf`;
   return { blob, filename };
 }

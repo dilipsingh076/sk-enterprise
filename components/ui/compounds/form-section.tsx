@@ -6,7 +6,7 @@ import { cn } from "@/components/ui/cn";
 import { Section } from "@/components/ui/sectioning";
 import { Heading, Span } from "@/components/ui/typography";
 
-type FormSectionProps = {
+export type FormSectionProps = {
   id: string;
   title: string;
   leading?: ReactNode;

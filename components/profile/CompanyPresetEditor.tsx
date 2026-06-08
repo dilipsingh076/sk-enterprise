@@ -3,18 +3,16 @@
 import { ChevronRight, FileText, Landmark, ScrollText } from "lucide-react";
 import { memo, useState } from "react";
 import { useFormContext, type Path } from "react-hook-form";
-import { FormSection } from "@/components/invoice/FormSection";
 import {
   Details,
-  Field,
+  FormSection,
   Grid,
   Input,
-  Kbd,
-  Label,
   Stack,
   Summary,
   Text,
-  TextArea,
+  TextAreaField,
+  TextField,
 } from "@/components/ui";
 import type { UserProfile } from "@/lib/invoice/userProfile";
 
@@ -73,30 +71,25 @@ function CompanyPresetEditorInner({
           <Text className="text-[11px] leading-snug text-zinc-600">
             Shown on the invoice page and under your legal name on the PDF.
           </Text>
-          <Field>
-            <Label>Menu name</Label>
-            <Input {...register(cp(index, "label"))} />
-            {e0?.label ? <Text className="mt-1 text-xs text-red-600">{e0.label.message}</Text> : null}
-          </Field>
-          <Field>
-            <Label>Invoice number prefix</Label>
-            <Input {...register(cp(index, "invoiceNumberPrefix"))} placeholder="e.g. UK" maxLength={12} />
-            <Text className="mt-1 text-[11px] text-zinc-500">
-              New invoice numbers start as <Kbd className="rounded bg-zinc-200 px-1 py-0.5 font-mono text-[10px]">PREFIX-</Kbd> on the
-              invoice page when this company is selected.
-            </Text>
-            {e0?.invoiceNumberPrefix ? (
-              <Text className="mt-1 text-xs text-red-600">{String(e0.invoiceNumberPrefix.message)}</Text>
-            ) : null}
-          </Field>
-          <Field>
-            <Label>PDF header description</Label>
-            <Input
-              {...register(cp(index, "seller.pdfHeaderDescription"))}
-              placeholder="e.g. Engineering, Infrastructure & Construction Works"
-            />
-            <Text className="mt-1 text-[11px] text-zinc-500">Leave blank to hide on the PDF.</Text>
-          </Field>
+          <TextField
+            label="Menu name"
+            required
+            error={e0?.label?.message}
+            {...register(cp(index, "label"))}
+          />
+          <TextField
+            label="Invoice number prefix"
+            placeholder="e.g. UK"
+            maxLength={12}
+            error={e0?.invoiceNumberPrefix?.message}
+            {...register(cp(index, "invoiceNumberPrefix"))}
+          />
+          <TextField
+            label="PDF header description"
+            optional
+            placeholder="e.g. Engineering, Infrastructure & Construction Works"
+            {...register(cp(index, "seller.pdfHeaderDescription"))}
+          />
         </Stack>
       </Details>
 
@@ -113,59 +106,48 @@ function CompanyPresetEditorInner({
           Legal name, GSTIN &amp; address
         </Summary>
         <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm" className="border-t border-zinc-100 bg-white px-2 py-3">
-          <Field className="sm:col-span-2">
-            <Label>Legal name</Label>
-            <Input {...register(cp(index, "seller.name"))} />
-            {e0?.seller?.name ? (
-              <Text className="mt-1 text-xs text-red-600">{e0.seller.name.message}</Text>
-            ) : null}
-          </Field>
-          <Field className="sm:col-span-2">
-            <Label>Address</Label>
-            <TextArea rows={2} {...register(cp(index, "seller.address"))} />
-            {e0?.seller?.address ? (
-              <Text className="mt-1 text-xs text-red-600">{e0.seller.address.message}</Text>
-            ) : null}
-          </Field>
-          <Field>
-            <Label>Pincode</Label>
-            <Input
-              {...register(cp(index, "seller.pincode"))}
-              maxLength={6}
-              inputMode="numeric"
-              autoComplete="postal-code"
-              placeholder="e.g. 248013"
-            />
-            {e0?.seller?.pincode ? (
-              <Text className="mt-1 text-xs text-red-600">{e0.seller.pincode.message}</Text>
-            ) : null}
-          </Field>
-          <Field>
-            <Label>City (optional)</Label>
-            <Input {...register(cp(index, "seller.city"))} autoComplete="address-level2" />
-          </Field>
-          <Field>
-            <Label>GSTIN</Label>
-            <Input {...register(cp(index, "seller.gstin"))} maxLength={15} />
-            {e0?.seller?.gstin ? (
-              <Text className="mt-1 text-xs text-red-600">{e0.seller.gstin.message}</Text>
-            ) : null}
-          </Field>
-          <Field>
-            <Label>PAN</Label>
-            <Input {...register(cp(index, "seller.pan"))} maxLength={10} />
-          </Field>
-          <Field>
-            <Label>State</Label>
-            <Input {...register(cp(index, "seller.stateName"))} />
-          </Field>
-          <Field>
-            <Label>State code</Label>
-            <Input {...register(cp(index, "seller.stateCode"))} maxLength={2} />
-            {e0?.seller?.stateCode ? (
-              <Text className="mt-1 text-xs text-red-600">{e0.seller.stateCode.message}</Text>
-            ) : null}
-          </Field>
+          <TextField
+            label="Legal name"
+            required
+            className="sm:col-span-2"
+            error={e0?.seller?.name?.message}
+            {...register(cp(index, "seller.name"))}
+          />
+          <TextAreaField
+            label="Address"
+            required
+            className="sm:col-span-2"
+            rows={2}
+            error={e0?.seller?.address?.message}
+            {...register(cp(index, "seller.address"))}
+          />
+          <TextField
+            label="Pincode"
+            required
+            error={e0?.seller?.pincode?.message}
+            maxLength={6}
+            inputMode="numeric"
+            autoComplete="postal-code"
+            placeholder="e.g. 248013"
+            {...register(cp(index, "seller.pincode"))}
+          />
+          <TextField label="City" optional autoComplete="address-level2" {...register(cp(index, "seller.city"))} />
+          <TextField
+            label="GSTIN"
+            required
+            error={e0?.seller?.gstin?.message}
+            maxLength={15}
+            {...register(cp(index, "seller.gstin"))}
+          />
+          <TextField label="PAN" optional maxLength={10} {...register(cp(index, "seller.pan"))} />
+          <TextField label="State" required {...register(cp(index, "seller.stateName"))} />
+          <TextField
+            label="State code"
+            required
+            maxLength={2}
+            error={e0?.seller?.stateCode?.message}
+            {...register(cp(index, "seller.stateCode"))}
+          />
         </Grid>
       </Details>
 
@@ -182,28 +164,16 @@ function CompanyPresetEditorInner({
           Contact
         </Summary>
         <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm" className="border-t border-zinc-100 bg-white px-2 py-3">
-          <Field>
-            <Label>Phone</Label>
-            <Input {...register(cp(index, "seller.phone"))} />
-            {e0?.seller?.phone ? (
-              <Text className="mt-1 text-xs text-red-600">{e0.seller.phone.message}</Text>
-            ) : null}
-          </Field>
-          <Field>
-            <Label>Email</Label>
-            <Input type="email" {...register(cp(index, "seller.email"))} />
-            {e0?.seller?.email ? (
-              <Text className="mt-1 text-xs text-red-600">{e0.seller.email.message}</Text>
-            ) : null}
-          </Field>
-          <Field>
-            <Label>Mobile (optional)</Label>
-            <Input {...register(cp(index, "seller.mobile"))} />
-          </Field>
-          <Field className="sm:col-span-2">
-            <Label>Kind attention (optional)</Label>
-            <Input {...register(cp(index, "seller.kindAttn"))} />
-          </Field>
+          <TextField label="Phone" required error={e0?.seller?.phone?.message} {...register(cp(index, "seller.phone"))} />
+          <TextField
+            label="Email"
+            required
+            type="email"
+            error={e0?.seller?.email?.message}
+            {...register(cp(index, "seller.email"))}
+          />
+          <TextField label="Mobile" optional {...register(cp(index, "seller.mobile"))} />
+          <TextField label="Kind attention" optional className="sm:col-span-2" {...register(cp(index, "seller.kindAttn"))} />
         </Grid>
       </Details>
 
@@ -221,29 +191,21 @@ function CompanyPresetEditorInner({
           Bank on PDF
         </Summary>
         <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm" className="border-t border-zinc-100 bg-white px-2 py-3">
-          <Field>
-            <Label>Bank</Label>
-            <Input {...register(cp(index, "seller.bankName"))} />
-            {e0?.seller?.bankName ? (
-              <Text className="mt-1 text-xs text-red-600">{e0.seller.bankName.message}</Text>
-            ) : null}
-          </Field>
-          <Field>
-            <Label>Account no.</Label>
-            <Input {...register(cp(index, "seller.accountNo"))} />
-            {e0?.seller?.accountNo ? (
-              <Text className="mt-1 text-xs text-red-600">{e0.seller.accountNo.message}</Text>
-            ) : null}
-          </Field>
-          <Field>
-            <Label>IFSC</Label>
-            <Input {...register(cp(index, "seller.ifsc"))} maxLength={11} />
-            {e0?.seller?.ifsc ? <Text className="mt-1 text-xs text-red-600">{e0.seller.ifsc.message}</Text> : null}
-          </Field>
-          <Field>
-            <Label>Branch (optional)</Label>
-            <Input {...register(cp(index, "seller.branch"))} />
-          </Field>
+          <TextField label="Bank" required error={e0?.seller?.bankName?.message} {...register(cp(index, "seller.bankName"))} />
+          <TextField
+            label="Account no."
+            required
+            error={e0?.seller?.accountNo?.message}
+            {...register(cp(index, "seller.accountNo"))}
+          />
+          <TextField
+            label="IFSC"
+            required
+            maxLength={11}
+            error={e0?.seller?.ifsc?.message}
+            {...register(cp(index, "seller.ifsc"))}
+          />
+          <TextField label="Branch" optional {...register(cp(index, "seller.branch"))} />
         </Grid>
       </Details>
 
@@ -261,42 +223,48 @@ function CompanyPresetEditorInner({
           PDF footer &amp; legal (optional)
         </Summary>
         <Grid columns="grid-cols-1 sm:grid-cols-2" gap="sm" className="border-t border-zinc-100 bg-white px-2 py-3">
-          <Field className="sm:col-span-2">
-            <Label>Regd. office &amp; works</Label>
-            <TextArea rows={2} {...register(cp(index, "seller.regdOffice"))} />
-          </Field>
-          <Field className="sm:col-span-2">
-            <Label>Other office / branch line</Label>
-            <Input {...register(cp(index, "seller.branchOfficeDetails"))} />
-          </Field>
-          <Field>
-            <Label>CIN</Label>
-            <Input {...register(cp(index, "seller.cin"))} />
-          </Field>
-          <Field>
-            <Label>TAN</Label>
-            <Input {...register(cp(index, "seller.tan"))} />
-          </Field>
-          <Field className="sm:col-span-2">
-            <Label>Certifications (ISO line)</Label>
-            <Input {...register(cp(index, "seller.certificationsLine"))} />
-          </Field>
-          <Field className="sm:col-span-2">
-            <Label>Jurisdiction</Label>
-            <Input {...register(cp(index, "seller.jurisdiction"))} />
-          </Field>
-          <Field className="sm:col-span-2">
-            <Label>Declaration (optional)</Label>
-            <TextArea rows={2} {...register(cp(index, "seller.declaration"))} />
-          </Field>
-          <Field className="sm:col-span-2">
-            <Label>Certification line</Label>
-            <Input {...register(cp(index, "seller.certificationLine"))} />
-          </Field>
-          <Field className="sm:col-span-2">
-            <Label>Terms &amp; conditions (numbered)</Label>
-            <TextArea rows={3} {...register(cp(index, "seller.termsAndConditions"))} />
-          </Field>
+          <TextAreaField
+            label="Regd. office & works"
+            optional
+            className="sm:col-span-2"
+            rows={2}
+            {...register(cp(index, "seller.regdOffice"))}
+          />
+          <TextField
+            label="Other office / branch line"
+            optional
+            className="sm:col-span-2"
+            {...register(cp(index, "seller.branchOfficeDetails"))}
+          />
+          <TextField label="CIN" optional {...register(cp(index, "seller.cin"))} />
+          <TextField label="TAN" optional {...register(cp(index, "seller.tan"))} />
+          <TextField
+            label="Certifications (ISO line)"
+            optional
+            className="sm:col-span-2"
+            {...register(cp(index, "seller.certificationsLine"))}
+          />
+          <TextField label="Jurisdiction" optional className="sm:col-span-2" {...register(cp(index, "seller.jurisdiction"))} />
+          <TextAreaField
+            label="Declaration"
+            optional
+            className="sm:col-span-2"
+            rows={2}
+            {...register(cp(index, "seller.declaration"))}
+          />
+          <TextField
+            label="Certification line"
+            optional
+            className="sm:col-span-2"
+            {...register(cp(index, "seller.certificationLine"))}
+          />
+          <TextAreaField
+            label="Terms & conditions (numbered)"
+            optional
+            className="sm:col-span-2"
+            rows={3}
+            {...register(cp(index, "seller.termsAndConditions"))}
+          />
         </Grid>
       </Details>
     </FormSection>
