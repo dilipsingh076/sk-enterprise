@@ -751,16 +751,12 @@ export function InvoicePdfDocument({
               right={{ label: "L.R. No. & Date", value: invoice.lrNumberAndDate ?? "" }}
             />
             <MetaGridRow
-              left={{ label: "Our GSTIN", value: seller.gstin }}
+              left={{ label: "Reverse Charge", value: invoice.reverseCharge ? "YES" : "NO" }}
               right={{ label: "Vehicle No.", value: invoice.vehicle ?? "" }}
             />
             <MetaGridRow
-              left={{ label: "Reverse Charge", value: invoice.reverseCharge ? "YES" : "NO" }}
-              right={{ label: "Way Bill No.", value: invoice.eWayBill ?? "" }}
-            />
-            <MetaGridRow
               left={{ label: "Purchase Order No.", value: invoice.poNumber ?? "" }}
-              right={{ label: "Delivery Terms", value: invoice.deliveryTermsLine ?? "" }}
+              right={{ label: "Way Bill No.", value: invoice.eWayBill ?? "" }}
             />
             <MetaGridRow
               left={{
