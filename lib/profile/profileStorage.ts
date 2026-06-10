@@ -1,11 +1,12 @@
 import { z } from "zod";
 import {
   companyPresetSchema,
+  savedLineItemSchema,
   userProfileSchema,
   type CompanyPreset,
   type UserProfile,
 } from "@/lib/invoice/userProfile";
-import { sellerSchema, type Seller } from "@/lib/invoice/schema";
+import { partySchema, sellerSchema, type Seller } from "@/lib/invoice/schema";
 
 /** Legacy shape before two-company profiles */
 const legacyProfileSchema = z.object({
@@ -51,8 +52,8 @@ const SECOND_SELLER: Seller = {
   gstin: "30AABCP1503H1Z7",
   stateName: "Maharashtra",
   stateCode: "27",
-  city: "",
-  pincode: "",
+  city: "Mumbai",
+  pincode: "400001",
   pan: "",
   mobile: "",
   phone: "+91-22-00000000",
@@ -164,18 +165,31 @@ export function getInvoiceNumberPrefixForCompanyId(profile: UserProfile, company
 
 /** Fill `recentBillTo`, `invoiceNumberPrefix`, and other defaults for older stored JSON. */
 function partyWithPincode<T extends { pincode?: string }>(party: T): T & { pincode: string } {
-  return { ...party, pincode: party.pincode ?? "" };
+  const pin = (party.pincode ?? "").trim();
+  return {
+    ...party,
+    pincode: /^\d{6}$/.test(pin) ? pin : "000000",
+  };
 }
 
+function ensureSellerDefaults(seller: Seller): Seller {
+  return partyWithPincode(seller);
+}
+
+/** Coerce profile JSON so it passes {@link userProfileSchema} before save. */
 export function ensureUserProfileDefaults(profile: UserProfile): UserProfile {
   return {
     ...profile,
-    savedLineItems: profile.savedLineItems ?? [],
-    recentBillTo: (profile.recentBillTo ?? []).map(partyWithPincode),
+    savedLineItems: (profile.savedLineItems ?? []).filter(
+      (item) => savedLineItemSchema.safeParse(item).success,
+    ),
+    recentBillTo: (profile.recentBillTo ?? [])
+      .map(partyWithPincode)
+      .filter((party) => partySchema.safeParse(party).success),
     companies: profile.companies.map((c) => ({
       ...c,
       invoiceNumberPrefix: getInvoiceNumberPrefix(c),
-      seller: partyWithPincode(c.seller),
+      seller: ensureSellerDefaults(c.seller),
     })) as UserProfile["companies"],
   };
 }

@@ -100,14 +100,15 @@ export function ProfileForm() {
 
   const onSubmit = handleSubmit(async (data) => {
     try {
+      const userProfile = ensureUserProfileDefaults(data);
       const active =
         activeCompanyIdFromBundle &&
-        data.companies.some((c) => c.id === activeCompanyIdFromBundle)
+        userProfile.companies.some((c) => c.id === activeCompanyIdFromBundle)
           ? activeCompanyIdFromBundle
-          : data.defaultCompanyId;
+          : userProfile.defaultCompanyId;
       await saveProfileBundle({
         version: 1,
-        userProfile: data,
+        userProfile,
         activeCompanyId: active,
       });
       setActiveCompanyIdFromBundle(active);
@@ -116,7 +117,7 @@ export function ProfileForm() {
         window.dispatchEvent(new Event("e-bill-profile-updated"));
       }
       setSaved("Profile saved.");
-      reset(data);
+      reset(userProfile);
     } catch (e) {
       setSaved(null);
       setLoadError(e instanceof Error ? e.message : "Save failed");
@@ -125,13 +126,14 @@ export function ProfileForm() {
 
   const restoreDefaults = useCallback(async () => {
     try {
+      const userProfile = ensureUserProfileDefaults(DEFAULT_USER_PROFILE);
       await saveProfileBundle({
         version: 1,
-        userProfile: DEFAULT_USER_PROFILE,
-        activeCompanyId: DEFAULT_USER_PROFILE.defaultCompanyId,
+        userProfile,
+        activeCompanyId: userProfile.defaultCompanyId,
       });
-      setActiveCompanyIdFromBundle(DEFAULT_USER_PROFILE.defaultCompanyId);
-      reset(DEFAULT_USER_PROFILE);
+      setActiveCompanyIdFromBundle(userProfile.defaultCompanyId);
+      reset(userProfile);
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("e-bill-profile-updated"));
       }
