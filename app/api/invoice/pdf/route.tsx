@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 import { prepareInvoicePayload } from "@/lib/invoice/billTaxDefaults";
 import { computeInvoiceTotals } from "@/lib/invoice/calculations";
 import { getBrandingLogoDataUri } from "@/lib/pdf/brandingLogo";
+import {
+  getBrandingSignatureDataUri,
+  usesBrandingSignature,
+} from "@/lib/pdf/brandingSignature";
 import { InvoicePdfDocument } from "@/lib/pdf/InvoicePdfDocument";
 import { amountInWordsInr } from "@/lib/invoice/words";
 import { invoiceSchema, resolveInvoice } from "@/lib/invoice/schema";
@@ -41,6 +45,9 @@ export async function POST(req: Request) {
   const taxAmountWords = amountInWordsInr(totals.totalTax);
 
   const logoSrc = getBrandingLogoDataUri();
+  const signatureSrc = usesBrandingSignature(invoice.seller.gstin)
+    ? getBrandingSignatureDataUri()
+    : null;
 
   let buffer: Buffer;
   try {
@@ -51,6 +58,7 @@ export async function POST(req: Request) {
         amountWords={amountWords}
         taxAmountWords={taxAmountWords}
         logoSrc={logoSrc ?? undefined}
+        signatureSrc={signatureSrc ?? undefined}
         showDraftWatermark={isPreview}
       />,
     );

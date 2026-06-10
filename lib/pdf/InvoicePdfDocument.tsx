@@ -390,6 +390,12 @@ const styles = StyleSheet.create({
     padding: 5,
     alignItems: "flex-end",
   },
+  signatureImage: {
+    width: 168,
+    height: 64,
+    objectFit: "contain",
+    marginTop: 18,
+  },
   termsTitle: {
     fontFamily: "Helvetica-Bold",
     fontSize: 7.5,
@@ -425,6 +431,13 @@ function fmtQty(n: number) {
     minimumFractionDigits: 3,
     maximumFractionDigits: 3,
   });
+}
+
+function fmtTaxPct(n: number): string {
+  const p = Number(n);
+  if (!Number.isFinite(p)) return "0%";
+  const rounded = Math.round(p * 100) / 100;
+  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(2)}%`;
 }
 
 
@@ -631,6 +644,7 @@ export function InvoicePdfDocument({
   amountWords,
   taxAmountWords,
   logoSrc,
+  signatureSrc,
   showDraftWatermark = false,
 }: {
   invoice: Invoice;
@@ -639,6 +653,8 @@ export function InvoicePdfDocument({
   taxAmountWords: string;
   /** Bundled SK logo (base64 data URI), optional if file missing */
   logoSrc?: string | null;
+  /** Bundled SK Enterprises proprietor signature (UK issuer only). */
+  signatureSrc?: string | null;
   /** Shown on inline PDF preview before final download. */
   showDraftWatermark?: boolean;
 }) {
@@ -859,15 +875,15 @@ export function InvoicePdfDocument({
                 <Text style={[styles.itemsThText, { textAlign: "right" }]}>Rate</Text>
               </View>
               <View style={[colGross, styles.itemsHeaderCell, styles.itemsHeaderCellSplit]}>
-                <Text style={[styles.itemsThText, { textAlign: "right" }]}>Amount</Text>
+                <Text style={[styles.itemsThText, { textAlign: "center" }]}>Tax %</Text>
               </View>
               <View style={[colTax, styles.itemsHeaderCell, styles.itemsHeaderCellSplit]}>
                 <Text style={[styles.itemsThText, { textAlign: "right" }]}>
-                  {totals.taxMode === "IGST" ? "IGST" : "Tax"}
+                  {totals.taxMode === "IGST" ? "IGST" : "CGST/\nSGST"}
                 </Text>
               </View>
               <View style={[colLineTotal, styles.itemsHeaderCell, styles.itemsHeaderCellSplit]}>
-                <Text style={[styles.itemsThText, { textAlign: "right" }]}>Total</Text>
+                <Text style={[styles.itemsThText, { textAlign: "right" }]}>Amount</Text>
               </View>
             </View>
             {totals.lines.map((line, i) => (
@@ -891,13 +907,15 @@ export function InvoicePdfDocument({
                   <Text style={styles.tdR}>{fmt(line.rate)}</Text>
                 </View>
                 <View style={[colGross, styles.itemsBodyCell, styles.itemsBodyCellSplit]}>
-                  <Text style={styles.tdR}>{fmt(line.grossAmount)}</Text>
+                  <Text style={styles.tdC}>
+                    {fmtTaxPct(line.taxPercent ?? totals.gstPercent)}
+                  </Text>
                 </View>
                 <View style={[colTax, styles.itemsBodyCell, styles.itemsBodyCellSplit]}>
                   <Text style={styles.tdR}>{fmt(line.taxAmount)}</Text>
                 </View>
                 <View style={[colLineTotal, styles.itemsBodyCell, styles.itemsBodyCellSplit]}>
-                  <Text style={styles.tdR}>{fmt(line.lineTotal)}</Text>
+                  <Text style={styles.tdR}>{fmt(line.taxableValue)}</Text>
                 </View>
               </View>
             ))}
@@ -922,7 +940,7 @@ export function InvoicePdfDocument({
             <View style={styles.totalsBody}>
               <View style={[styles.totalsWordsArea, totalsWordsWidth]}>
                 <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 8 }}>
-                  Amount in words : -
+                  Grand total in words : -
                 </Text>
                 <Text style={{ fontSize: 8.5, marginTop: 2 }}>{amountWords}</Text>
               </View>
@@ -935,7 +953,7 @@ export function InvoicePdfDocument({
                   />
                 ) : null}
                 {totals.taxMode === "IGST" ? (
-                  <TotalsFigureRow label="IGST Amount" value={fmt(totals.igst)} />
+                  <TotalsFigureRow label="IGST" value={fmt(totals.igst)} />
                 ) : (
                   <>
                     <TotalsFigureRow label="CGST" value={fmt(totals.cgst)} />
@@ -953,7 +971,7 @@ export function InvoicePdfDocument({
 
             <View style={styles.grandRow}>
               <View style={[styles.grandLabelCell, totalsWordsWidth]}>
-                <Text style={styles.grandLabelText}>GRAND TOTAL</Text>
+                <Text style={styles.grandLabelText}>Grand total</Text>
               </View>
               <View style={[colTax, styles.totalsFigureLabelCol]} />
               <View style={[colLineTotal, styles.grandValueCell, styles.totalsFigureValueCol]}>
@@ -1002,25 +1020,31 @@ export function InvoicePdfDocument({
             </Text>
           </View>
           <View style={styles.certRight}>
-            <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold" }}>For {seller.name}</Text>
-            <View
-              style={{
-                width: 70,
-                height: 60,
-                borderWidth: 1,
-                borderColor: "#aaa",
-                borderStyle: "dashed",
-                marginTop: 4,
-                marginBottom: 4,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text style={{ fontSize: 6.5, color: "#888" }}>Round Seal</Text>
-            </View>
-            <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold" }}>
-              Authorised Signatory
-            </Text>
+            {signatureSrc ? (
+              <Image src={signatureSrc} style={styles.signatureImage} />
+            ) : (
+              <>
+                <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold" }}>For {seller.name}</Text>
+                <View
+                  style={{
+                    width: 70,
+                    height: 60,
+                    borderWidth: 1,
+                    borderColor: "#aaa",
+                    borderStyle: "dashed",
+                    marginTop: 4,
+                    marginBottom: 4,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text style={{ fontSize: 6.5, color: "#888" }}>Round Seal</Text>
+                </View>
+                <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold" }}>
+                  Authorised Signatory
+                </Text>
+              </>
+            )}
           </View>
         </View>
 
