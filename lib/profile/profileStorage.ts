@@ -231,8 +231,9 @@ function escapeReg(s: string): string {
 
 /**
  * Forces the invoice number to use the selected company’s prefix (Profile → invoice prefix).
- * Strips any known company prefix from the value, then prepends the correct one so bare
- * suffixes like `2025-001` become `UK-2025-001` when that company is active.
+ * Strips any known company prefix from the value (without touching any separator the user
+ * typed), then prepends the correct prefix. So `2025-001` becomes `UK2025-001` and
+ * `-2025-001` becomes `UK-2025-001` when the user wants to keep the dash.
  */
 export function ensureInvoiceNumberForCompanyId(
   invoiceNumber: string,
@@ -242,21 +243,21 @@ export function ensureInvoiceNumberForCompanyId(
   const p = ensureUserProfileDefaults(profile);
   const prefix = getInvoiceNumberPrefixForCompanyId(p, companyId);
   let cur = invoiceNumber.trim();
-  if (!cur) return `${prefix}-`;
+  if (!cur) return prefix;
 
-  if (new RegExp(`^${escapeReg(prefix)}-`, "i").test(cur)) {
-    return cur.replace(new RegExp(`^${escapeReg(prefix)}-`, "i"), `${prefix}-`);
+  if (prefix && new RegExp(`^${escapeReg(prefix)}`, "i").test(cur)) {
+    const rest = cur.replace(new RegExp(`^${escapeReg(prefix)}`, "i"), "");
+    return `${prefix}${rest}`;
   }
 
   for (const c of p.companies) {
     const pref = getInvoiceNumberPrefix(c);
-    if (new RegExp(`^${escapeReg(pref)}-`, "i").test(cur)) {
-      cur = cur.replace(new RegExp(`^${escapeReg(pref)}-`, "i"), "");
+    if (pref && new RegExp(`^${escapeReg(pref)}`, "i").test(cur)) {
+      cur = cur.replace(new RegExp(`^${escapeReg(pref)}`, "i"), "");
       break;
     }
   }
-  cur = cur.replace(/^-+/, "");
-  return `${prefix}-${cur}`;
+  return `${prefix}${cur}`;
 }
 
 /**
@@ -273,25 +274,24 @@ export function splitInvoiceNumberTail(
   const activePrefix = getInvoiceNumberPrefixForCompanyId(p, companyId);
   let rest = full.trim();
 
-  if (new RegExp(`^${escapeReg(activePrefix)}-`, "i").test(rest)) {
-    rest = rest.replace(new RegExp(`^${escapeReg(activePrefix)}-`, "i"), "");
+  if (activePrefix && new RegExp(`^${escapeReg(activePrefix)}`, "i").test(rest)) {
+    rest = rest.replace(new RegExp(`^${escapeReg(activePrefix)}`, "i"), "");
   } else {
     for (const c of p.companies) {
       const pref = getInvoiceNumberPrefix(c);
-      if (new RegExp(`^${escapeReg(pref)}-`, "i").test(rest)) {
-        rest = rest.replace(new RegExp(`^${escapeReg(pref)}-`, "i"), "");
+      if (pref && new RegExp(`^${escapeReg(pref)}`, "i").test(rest)) {
+        rest = rest.replace(new RegExp(`^${escapeReg(pref)}`, "i"), "");
         break;
       }
     }
   }
-  rest = rest.replace(/^-+/, "");
   return { prefix: activePrefix, suffix: rest };
 }
 
 /** Inverse of {@link splitInvoiceNumberTail} for the suffix field only. */
 export function joinInvoiceNumberTail(prefix: string, suffix: string): string {
   const s = suffix.trim();
-  return `${prefix}-${s}`;
+  return `${prefix}${s}`;
 }
 
 /**

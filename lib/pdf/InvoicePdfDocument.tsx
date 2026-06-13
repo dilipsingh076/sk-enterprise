@@ -124,11 +124,12 @@ const styles = StyleSheet.create({
   },
   topBuyerRight: {
     flex: 1.5,
-    paddingVertical: 2,
+    paddingVertical: 3,
     paddingHorizontal: 4,
     borderLeftWidth: 1,
     borderColor: GRID,
-    fontSize: 7,
+    fontSize: 10,
+    lineHeight: 1.35,
     textAlign: "right",
   },
   irnLabel: { fontFamily: "Helvetica-Bold" },
@@ -180,11 +181,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   partyHeaderLabel: { flex: 1, fontFamily: "Helvetica-Bold", fontSize: 8 },
-  partyHeaderBadge: {
-    fontFamily: "Helvetica-Bold",
-    fontSize: 8,
-    paddingHorizontal: 4,
-  },
 
   partyBodyRow: { flexDirection: "row", borderBottomWidth: 1, borderColor: GRID },
   partyBody: {
@@ -291,9 +287,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
 
-  tdC: { fontSize: 7.5, textAlign: "center", paddingHorizontal: 3 },
-  tdL: { fontSize: 7.5, textAlign: "left", paddingHorizontal: 3 },
-  tdR: { fontSize: 7.5, textAlign: "right", paddingHorizontal: 3 },
+  tdC: { fontSize: 8.5, textAlign: "center", paddingHorizontal: 3 },
+  tdL: { fontSize: 8.5, textAlign: "left", paddingHorizontal: 3 },
+  tdR: { fontSize: 8.5, textAlign: "right", paddingHorizontal: 3 },
 
   vline: { borderLeftWidth: 1, borderColor: GRID },
 
@@ -311,6 +307,8 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 5,
     justifyContent: "flex-end",
+    borderBottomWidth: 1,
+    borderColor: GRID,
   },
   totalsFiguresTable: {
     alignSelf: "stretch",
@@ -391,10 +389,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   signatureImage: {
-    width: 168,
-    height: 64,
+    width: 220,
+    height: 84,
     objectFit: "contain",
-    marginTop: 18,
+    marginTop: 12,
   },
   termsTitle: {
     fontFamily: "Helvetica-Bold",
@@ -642,7 +640,6 @@ export function InvoicePdfDocument({
   invoice,
   totals,
   amountWords,
-  taxAmountWords,
   logoSrc,
   signatureSrc,
   showDraftWatermark = false,
@@ -650,7 +647,6 @@ export function InvoicePdfDocument({
   invoice: Invoice;
   totals: InvoiceTotals;
   amountWords: string;
-  taxAmountWords: string;
   /** Bundled SK logo (base64 data URI), optional if file missing */
   logoSrc?: string | null;
   /** Bundled SK Enterprises proprietor signature (UK issuer only). */
@@ -668,11 +664,7 @@ export function InvoicePdfDocument({
   const shipSame = invoice.shipSameAsBill;
   const regdBody = seller.regdOffice?.trim() || seller.address.trim();
 
-  const billStateBadge = `${billTo.stateCode || ""}${
-    billTo.stateCode && billTo.stateName ? "" : ""
-  }`;
   const shipParty = shipSame ? billTo : shipToResolved;
-  const shipStateBadge = shipParty.stateCode || "";
   const showItemsFillerRow = totals.lines.length <= LINE_ITEMS_FILLER_MAX;
 
   return (
@@ -783,13 +775,11 @@ export function InvoicePdfDocument({
               <Text style={styles.partyHeaderLabel}>
                 Name &amp; Address of Recipient ( Billed to )
               </Text>
-              <Text style={styles.partyHeaderBadge}>{billStateBadge}</Text>
             </View>
             <View style={[styles.partyHeaderCell, styles.vline]}>
               <Text style={styles.partyHeaderLabel}>
                 Name &amp; Address of Consignee ( Shipped to )
               </Text>
-              <Text style={styles.partyHeaderBadge}>{shipStateBadge}</Text>
             </View>
           </View>
 
@@ -888,7 +878,7 @@ export function InvoicePdfDocument({
                   <Text style={styles.tdC}>{i + 1}</Text>
                 </View>
                 <View style={[colDesc, styles.itemsBodyDescCell]}>
-                  <Multiline text={line.description} />
+                  <Multiline text={line.description} style={{ fontSize: 8.5 }} />
                 </View>
                 <View style={[colHsn, styles.itemsBodyCell, styles.itemsBodyCellSplit]}>
                   <Text style={styles.tdC}>{line.hsn}</Text>
@@ -1011,9 +1001,6 @@ export function InvoicePdfDocument({
                 {seller.branch?.trim() ? `, Branch: ${seller.branch.trim()}` : ""}
               </Text>
             </View>
-            <Text style={[styles.termsLine, { marginTop: 4 }]}>
-              Tax Amount (in words) : {taxAmountWords}
-            </Text>
           </View>
           <View style={styles.certRight}>
             {signatureSrc ? (
@@ -1062,31 +1049,30 @@ export function InvoicePdfDocument({
               {seller.branchOfficeDetails.trim()}
             </Text>
           ) : null}
-          <Text style={[styles.footerText, { marginBottom: 1 }]}>
-            {seller.cin?.trim() ? (
-              <>
-                <Text style={styles.footerBold}>CIN : </Text>
-                {seller.cin.trim()}
-                {"   "}
-              </>
-            ) : null}
-            {seller.pan?.trim() ? (
-              <>
-                <Text style={styles.footerBold}>PAN : </Text>
-                {seller.pan.trim()}
-                {"   "}
-              </>
-            ) : null}
-            <Text style={styles.footerBold}>GSTIN : </Text>
-            {seller.gstin}
-            {seller.tan?.trim() ? (
-              <>
-                {"   "}
-                <Text style={styles.footerBold}>TAN : </Text>
-                {seller.tan.trim()}
-              </>
-            ) : null}
-          </Text>
+          {seller.cin?.trim() || seller.pan?.trim() || seller.tan?.trim() ? (
+            <Text style={[styles.footerText, { marginBottom: 1 }]}>
+              {seller.cin?.trim() ? (
+                <>
+                  <Text style={styles.footerBold}>CIN : </Text>
+                  {seller.cin.trim()}
+                  {seller.pan?.trim() || seller.tan?.trim() ? "   " : ""}
+                </>
+              ) : null}
+              {seller.pan?.trim() ? (
+                <>
+                  <Text style={styles.footerBold}>PAN : </Text>
+                  {seller.pan.trim()}
+                  {seller.tan?.trim() ? "   " : ""}
+                </>
+              ) : null}
+              {seller.tan?.trim() ? (
+                <>
+                  <Text style={styles.footerBold}>TAN : </Text>
+                  {seller.tan.trim()}
+                </>
+              ) : null}
+            </Text>
+          ) : null}
         </View>
       </Page>
     </Document>

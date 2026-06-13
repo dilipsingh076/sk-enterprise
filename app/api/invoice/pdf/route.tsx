@@ -42,7 +42,6 @@ export async function POST(req: Request) {
     invoice.extraCharges ?? 0,
   );
   const amountWords = amountInWordsInr(totals.grandTotal);
-  const taxAmountWords = amountInWordsInr(totals.totalTax);
 
   const logoSrc = getBrandingLogoDataUri();
   const signatureSrc = usesBrandingSignature(invoice.seller.gstin)
@@ -56,7 +55,6 @@ export async function POST(req: Request) {
         invoice={invoice}
         totals={totals}
         amountWords={amountWords}
-        taxAmountWords={taxAmountWords}
         logoSrc={logoSrc ?? undefined}
         signatureSrc={signatureSrc ?? undefined}
         showDraftWatermark={isPreview}

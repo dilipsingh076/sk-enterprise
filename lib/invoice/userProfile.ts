@@ -16,7 +16,7 @@ export const companyPresetSchema = z.object({
   id: z.string().min(1),
   /** Shown in the invoice “Issue as” menu */
   label: z.string().min(1, "Menu name required"),
-  /** Short prefix for invoice numbers, e.g. UK, MH → `UK-2025-001` */
+  /** Short prefix for invoice numbers, e.g. UK, MH → `UK2025-001` */
   invoiceNumberPrefix: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z

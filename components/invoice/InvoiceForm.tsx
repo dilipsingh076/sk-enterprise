@@ -1007,7 +1007,7 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
                             aria-hidden
                             className="flex shrink-0 items-center self-stretch border-r border-zinc-200 bg-zinc-50 px-2.5 font-mono text-sm font-semibold tabular-nums text-zinc-800"
                           >
-                            {prefix}-
+                            {prefix}
                           </Span>
                           <Input
                             id="invoice-number-suffix"
@@ -1039,7 +1039,7 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
                     }}
                   />
                   <Text id="invoice-number-prefix-hint" caption className="sr-only">
-                    Company prefix to the left is fixed for the selected company; type only the part after the hyphen.
+                    Company prefix to the left is fixed for the selected company; type only the part after the prefix.
                   </Text>
                   {duplicateInvoiceMsg ? (
                     <Banner tone="warning" role="status" className="mt-2 py-2 text-xs">

@@ -91,7 +91,7 @@ export function buildBillFormDefaults(
   const prefix = getInvoiceNumberPrefixForCompanyId(p, cid);
   return {
     seller,
-    invoiceNumber: `${prefix}-`,
+    invoiceNumber: prefix,
     invoiceDate: today,
     ...tax,
     eWayBill: "",

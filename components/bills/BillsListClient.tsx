@@ -91,7 +91,7 @@ export function BillsListClient() {
       typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID().replace(/-/g, "").slice(0, 4).toUpperCase()
         : "COPY";
-    const suggested = `${prefix}-COPY-${tag}`;
+    const suggested = `${prefix}COPY-${tag}`;
     const num = window.prompt("Invoice number for copy:", suggested);
     if (!num?.trim()) return;
     setBusyId(b.id);
