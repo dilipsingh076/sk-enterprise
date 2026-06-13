@@ -731,11 +731,16 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
     onInvalid,
   );
 
-  /** Opens the preview panel; generates PDF only when there is no preview yet. */
+  /** Opens the preview panel and always regenerates so layout changes are visible. */
   const ensurePdfPreview = useCallback(() => {
     setPdfPreviewOpen(true);
-    if (!previewUrl) void onPreview();
-  }, [previewUrl, onPreview]);
+    void onPreview();
+  }, [onPreview]);
+
+  const previewIframeSrc = useMemo(
+    () => (previewUrl ? `${previewUrl}#zoom=125` : null),
+    [previewUrl],
+  );
 
   const onUpdateSavedBill = handleSubmit(
     async (data) => {
@@ -1480,7 +1485,7 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
                     PDF preview
                   </Heading>
                   <Text caption className="mt-0.5">
-                    Same layout as the downloaded PDF.
+                    Same layout as the downloaded PDF. Preview opens at 125% zoom for readability.
                   </Text>
                 </Stack>
                 <Row className="shrink-0 flex-wrap" gap="sm">
@@ -1507,12 +1512,16 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
                   {previewError}
                 </Banner>
               ) : null}
-              {previewUrl ? (
+              {previewIframeSrc ? (
                 <Iframe
                   title="Invoice PDF preview"
-                  src={previewUrl}
-                  className="h-[min(58vh,560px)] w-full rounded-lg border border-zinc-300 bg-white"
+                  src={previewIframeSrc}
+                  className="h-[min(80vh,880px)] w-full rounded-lg border border-zinc-300 bg-white"
                 />
+              ) : previewLoading ? (
+                <Box className="flex h-28 items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-white px-2 text-center text-xs text-zinc-500 sm:text-sm">
+                  Generating preview…
+                </Box>
               ) : (
                 <Box className="flex h-28 items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-white px-2 text-center text-xs text-zinc-500 sm:text-sm">
                   No preview yet — use Refresh preview when the form is valid.

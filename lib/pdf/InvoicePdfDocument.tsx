@@ -389,8 +389,8 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   signatureImage: {
-    width: 220,
-    height: 84,
+    width: 209,
+    height: 80,
     objectFit: "contain",
     marginTop: 12,
   },
