@@ -19,7 +19,7 @@ const HEADER_BG = "#0a0a0a";
 
 const styles = StyleSheet.create({
   page: {
-    fontSize: 8,
+    fontSize: 8.5,
     paddingTop: 12,
     paddingBottom: 14,
     paddingHorizontal: 14,
@@ -55,7 +55,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   headerDescription: {
-    fontSize: 7.5,
+    fontSize: 8.5,
     fontFamily: "Helvetica",
     color: "#222",
     lineHeight: 1.25,
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 2,
     paddingHorizontal: 4,
-    fontSize: 8,
+    fontSize: 8.5,
     /** Slanted text — do not combine Helvetica-Bold with fontStyle italic (font resolution fails). */
     fontFamily: "Helvetica-Oblique",
   },
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   metaLabelText: {
-    fontSize: 7.5,
+    fontSize: 8.5,
   },
   metaValueCell: {
     flexGrow: 1,
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     borderColor: GRID,
   },
   metaValueText: {
-    fontSize: 7.5,
+    fontSize: 8.5,
     fontFamily: "Helvetica-Bold",
   },
   vsplit: { borderLeftWidth: 1, borderColor: GRID },
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     paddingHorizontal: 4,
   },
-  partyHeaderLabel: { flex: 1, fontFamily: "Helvetica-Bold", fontSize: 8 },
+  partyHeaderLabel: { flex: 1, fontFamily: "Helvetica-Bold", fontSize: 8.5 },
 
   partyBodyRow: { flexDirection: "row", borderBottomWidth: 1, borderColor: GRID },
   partyBody: {
@@ -188,8 +188,8 @@ const styles = StyleSheet.create({
     padding: 4,
     minHeight: 56,
   },
-  partyName: { fontFamily: "Helvetica-Bold", fontSize: 8, marginBottom: 1 },
-  partyText: { fontSize: 7.5, lineHeight: 1.35 },
+  partyName: { fontFamily: "Helvetica-Bold", fontSize: 8.5, marginBottom: 1 },
+  partyText: { fontSize: 8.5, lineHeight: 1.35 },
 
   partyDetailRow: { flexDirection: "row", borderBottomWidth: 1, borderColor: GRID },
   partyDetailHalf: { flex: 1, flexDirection: "row" },
@@ -197,13 +197,13 @@ const styles = StyleSheet.create({
     width: "32%",
     paddingVertical: 2,
     paddingHorizontal: 4,
-    fontSize: 7.5,
+    fontSize: 8.5,
   },
   pdValue: {
     width: "68%",
     paddingVertical: 2,
     paddingHorizontal: 4,
-    fontSize: 7.5,
+    fontSize: 8.5,
     fontFamily: "Helvetica-Bold",
     borderLeftWidth: 1,
     borderColor: GRID,
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
     borderColor: GRID,
     paddingVertical: 2,
     paddingHorizontal: 4,
-    fontSize: 7.5,
+    fontSize: 8.5,
   },
 
   fullWidthTable: {
@@ -234,14 +234,14 @@ const styles = StyleSheet.create({
   },
   th: {
     fontFamily: "Helvetica-Bold",
-    fontSize: 7.5,
+    fontSize: 8.5,
     paddingVertical: 4,
     paddingHorizontal: 3,
   },
   /** Line-items table header text (padding lives on the cell). */
   itemsThText: {
     fontFamily: "Helvetica-Bold",
-    fontSize: 7.5,
+    fontSize: 8.5,
     paddingHorizontal: 3,
     paddingVertical: 0,
   },
@@ -335,12 +335,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   totalsFigureLabelText: {
-    fontSize: 8,
+    fontSize: 8.5,
     fontFamily: "Helvetica-Bold",
     textAlign: "left",
   },
   totalsFigureValueText: {
-    fontSize: 8,
+    fontSize: 8.5,
     fontFamily: "Helvetica-Bold",
     textAlign: "right",
   },
@@ -396,11 +396,11 @@ const styles = StyleSheet.create({
   },
   termsTitle: {
     fontFamily: "Helvetica-Bold",
-    fontSize: 7.5,
+    fontSize: 8.5,
     marginTop: 4,
     marginBottom: 2,
   },
-  termsLine: { fontSize: 7, lineHeight: 1.4 },
+  termsLine: { fontSize: 8.5, lineHeight: 1.4 },
 
   footerBar: {
     marginTop: 6,
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 8,
   },
-  footerText: { color: "#fff", fontSize: 7, lineHeight: 1.4 },
+  footerText: { color: "#fff", fontSize: 8.5, lineHeight: 1.4 },
   footerBold: { color: "#fff", fontFamily: "Helvetica-Bold" },
 });
 
@@ -925,7 +925,7 @@ export function InvoicePdfDocument({
           <View style={styles.totalsBlock}>
             <View style={styles.totalsBody}>
               <View style={[styles.totalsWordsArea, totalsWordsWidth]}>
-                <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 8 }}>
+                <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 8.5 }}>
                   Grand total in words : -
                 </Text>
                 <Text style={{ fontSize: 8.5, marginTop: 2 }}>{amountWords}</Text>
@@ -971,9 +971,9 @@ export function InvoicePdfDocument({
 
         <View style={styles.certRow} wrap={false}>
           <View style={styles.certLeft}>
-            <Text style={{ fontSize: 7.5 }}>{certLine}</Text>
+            <Text style={{ fontSize: 8.5 }}>{certLine}</Text>
             {seller.declaration?.trim() ? (
-              <Text style={{ fontSize: 7, marginTop: 2 }}>{seller.declaration.trim()}</Text>
+              <Text style={{ fontSize: 8.5, marginTop: 2 }}>{seller.declaration.trim()}</Text>
             ) : null}
             <Text style={styles.termsTitle}>Terms &amp; Condition :</Text>
             <Multiline text={termsText} style={styles.termsLine} />
@@ -1007,7 +1007,7 @@ export function InvoicePdfDocument({
               <Image src={signatureSrc} style={styles.signatureImage} />
             ) : (
               <>
-                <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold" }}>For {seller.name}</Text>
+                <Text style={{ fontSize: 8.5, fontFamily: "Helvetica-Bold" }}>For {seller.name}</Text>
                 <View
                   style={{
                     width: 70,
@@ -1023,7 +1023,7 @@ export function InvoicePdfDocument({
                 >
                   <Text style={{ fontSize: 6.5, color: "#888" }}>Round Seal</Text>
                 </View>
-                <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold" }}>
+                <Text style={{ fontSize: 8.5, fontFamily: "Helvetica-Bold" }}>
                   Authorised Signatory
                 </Text>
               </>

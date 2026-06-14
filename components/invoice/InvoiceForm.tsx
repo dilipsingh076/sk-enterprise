@@ -738,7 +738,7 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
   }, [onPreview]);
 
   const previewIframeSrc = useMemo(
-    () => (previewUrl ? `${previewUrl}#zoom=125` : null),
+    () => (previewUrl ? `${previewUrl}#zoom=100` : null),
     [previewUrl],
   );
 
@@ -1485,7 +1485,7 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
                     PDF preview
                   </Heading>
                   <Text caption className="mt-0.5">
-                    Same layout as the downloaded PDF. Preview opens at 125% zoom for readability.
+                    Same layout as the downloaded PDF. Preview opens at 100% zoom.
                   </Text>
                 </Stack>
                 <Row className="shrink-0 flex-wrap" gap="sm">
