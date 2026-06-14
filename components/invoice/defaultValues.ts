@@ -4,6 +4,7 @@ import {
 } from "@/lib/invoice/billTaxDefaults";
 import { formatInvoiceDate, normalizeInvoiceDateStorage } from "@/lib/invoice/formatInvoiceDate";
 import { coerceIndianGstRate } from "@/lib/invoice/indianGstRates";
+import { roundTo2 } from "@/lib/invoice/calculations";
 import type { InvoiceFormInput, LineItem } from "@/lib/invoice/schema";
 import type { UserProfile } from "@/lib/invoice/userProfile";
 import {
@@ -24,6 +25,8 @@ export function normalizeLineItemsLine(
       : coerceIndianGstRate(defaultTaxPercent);
   return {
     ...row,
+    quantity: roundTo2(row.quantity),
+    rate: roundTo2(row.rate),
     discountKind: "AMOUNT",
     discount: 0,
     taxPercent: tax,
@@ -54,6 +57,7 @@ export function normalizeLoadedInvoiceForm(data: InvoiceFormInput): InvoiceFormI
   return {
     ...rest,
     purchaserName: rest.purchaserName?.trim() || legacyPaymentTerms?.trim() || "",
+    extraCharges: rest.extraCharges != null ? roundTo2(rest.extraCharges) : rest.extraCharges,
     billTo: { ...rest.billTo, pincode: rest.billTo.pincode ?? "" },
     shipTo: rest.shipTo ? { ...rest.shipTo, pincode: rest.shipTo.pincode ?? "" } : rest.shipTo,
     lineItems: rest.lineItems.map((row) => normalizeLineItemsLine(row, defaultTax)),

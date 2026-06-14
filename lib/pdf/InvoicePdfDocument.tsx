@@ -8,6 +8,7 @@ import {
 } from "@react-pdf/renderer";
 import type { Style } from "@react-pdf/types";
 import type { InvoiceTotals } from "@/lib/invoice/calculations";
+import { formatDecimal2 } from "@/lib/invoice/formatDecimal";
 import { normalizeInvoiceDateStorage } from "@/lib/invoice/formatInvoiceDate";
 import type { Invoice } from "@/lib/invoice/schema";
 
@@ -418,17 +419,11 @@ const DEFAULT_TERMS = `1) Interest will be recovered @ 18% p.a. on overdue unpai
 3) Subject to jurisdiction as stated below.`;
 
 function fmt(n: number) {
-  return n.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatDecimal2(n);
 }
 
 function fmtQty(n: number) {
-  return n.toLocaleString("en-IN", {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
-  });
+  return formatDecimal2(n);
 }
 
 function fmtTaxPct(n: number): string {

@@ -24,6 +24,11 @@ import {
 } from "react-hook-form";
 import { visibleFieldError } from "@/lib/form/visibleFieldError";
 import { computeInvoiceTotals } from "@/lib/invoice/calculations";
+import {
+  bindTwoDecimalInput,
+  formatDecimal2,
+  optionalTwoDecimalNumField,
+} from "@/lib/invoice/formatDecimal";
 import { fetchInvoicePdf } from "@/lib/invoice/fetchInvoicePdf";
 import { partyStateWarning } from "@/lib/invoice/partyStateWarnings";
 import {
@@ -104,11 +109,7 @@ import { useToast } from "@/components/ui/toast";
 import { LineItemsEditor } from "./LineItemsEditor";
 
 function formatInr(n: number) {
-  return n.toLocaleString("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  });
+  return `₹${formatDecimal2(n)}`;
 }
 
 function billToPartyInitials(name: string): string {
@@ -346,6 +347,11 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
     (name: Path<InvoiceFormInput>) =>
       visibleFieldError(errors, touchedFields, isSubmitted, name),
     [errors, touchedFields, isSubmitted],
+  );
+
+  const extraChargesField = bindTwoDecimalInput(
+    register("extraCharges", optionalTwoDecimalNumField),
+    0,
   );
 
   useEffect(() => {
@@ -1316,10 +1322,8 @@ export function InvoiceForm({ editBillId }: { editBillId?: string }) {
             <TextField
               label="Other charges (₹)"
               type="number"
-              min={0}
-              step="0.01"
               error={fieldError("extraCharges")}
-              {...register("extraCharges", { valueAsNumber: true })}
+              {...extraChargesField}
             />
             <TextField
               label="Other charges label"

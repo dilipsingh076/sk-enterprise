@@ -38,6 +38,11 @@ import {
   lineTaxableValue,
 } from "@/lib/invoice/calculations";
 import {
+  bindTwoDecimalInput,
+  formatDecimal2,
+  twoDecimalNumField,
+} from "@/lib/invoice/formatDecimal";
+import {
   coerceIndianGstRate,
   gstRateSelectValue,
   INDIAN_GST_RATE_OPTIONS,
@@ -47,20 +52,8 @@ import type { InvoiceFormInput, LineItem } from "@/lib/invoice/schema";
 import type { SavedLineItem } from "@/lib/invoice/userProfile";
 
 function formatAmt(n: number) {
-  return n.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatDecimal2(n);
 }
-
-const numField = {
-  valueAsNumber: true,
-  setValueAs: (v: string | number) => {
-    if (v === "" || v == null) return 0;
-    const n = typeof v === "number" ? v : Number(v);
-    return Number.isFinite(n) ? n : 0;
-  },
-} as const;
 
 const cellInput =
   "mt-0 box-border w-full min-w-0 border border-zinc-300 bg-white px-1.5 py-1 text-xs text-zinc-900 " +
@@ -133,6 +126,11 @@ const LineItemRow = memo(function LineItemRow({
   const rowTouched = isSubmitted || Boolean(get(touchedFields, `lineItems.${index}`));
   const cellError = (name: "description" | "hsn" | "quantity" | "unit" | "rate" | "taxPercent") =>
     rowTouched ? rowErrors?.[name]?.message : undefined;
+  const quantityField = bindTwoDecimalInput(
+    register(`lineItems.${index}.quantity`, twoDecimalNumField),
+    0,
+  );
+  const rateField = bindTwoDecimalInput(register(`lineItems.${index}.rate`, twoDecimalNumField), 0);
   const zebra = index % 2 === 1;
   const rowBg = zebra ? "bg-zinc-50/90" : "bg-white";
   const stickyCellBg = zebra ? "bg-zinc-50/98" : "bg-white/98";
@@ -164,9 +162,7 @@ const LineItemRow = memo(function LineItemRow({
       <Td className={tdBase}>
         <Input
           type="number"
-          step="any"
-          min={0}
-          {...register(`lineItems.${index}.quantity`, numField)}
+          {...quantityField}
           className={numInput}
         />
         <CellError message={cellError("quantity")} />
@@ -197,9 +193,7 @@ const LineItemRow = memo(function LineItemRow({
       <Td className={tdBase}>
         <Input
           type="number"
-          step="any"
-          min={0}
-          {...register(`lineItems.${index}.rate`, numField)}
+          {...rateField}
           className={numInput}
         />
         <CellError message={cellError("rate")} />

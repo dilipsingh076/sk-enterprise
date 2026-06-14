@@ -6,6 +6,12 @@ export function toNum(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Round to 2 decimal places (paise). */
+export function roundTo2(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Number(n.toFixed(2));
+}
+
 /** Percent field: 0–100 inclusive, rounded to 2 decimal places. */
 export function clampPercent(v: unknown): number {
   const n = toNum(v);
@@ -16,7 +22,7 @@ export function clampPercent(v: unknown): number {
 
 /** Gross before discount: qty × rate (2 dp). */
 export function lineGross(line: Pick<LineItem, "quantity" | "rate">): number {
-  return Math.round(toNum(line.quantity) * toNum(line.rate) * 100) / 100;
+  return roundTo2(roundTo2(toNum(line.quantity)) * roundTo2(toNum(line.rate)));
 }
 
 export function lineTaxPercent(line: LineItem, invoiceGstPercent: number): number {

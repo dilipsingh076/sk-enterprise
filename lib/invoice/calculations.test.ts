@@ -3,6 +3,7 @@ import {
   autoRoundOffRupee,
   computeInvoiceTotals,
   lineTaxableValue,
+  roundTo2,
 } from "./calculations";
 import type { LineItem } from "./schema";
 
@@ -19,6 +20,14 @@ function line(overrides: Partial<LineItem> = {}): LineItem {
     ...overrides,
   };
 }
+
+describe("roundTo2", () => {
+  it("keeps two decimal places", () => {
+    expect(roundTo2(1.234)).toBe(1.23);
+    expect(roundTo2(1.235)).toBe(1.24);
+    expect(roundTo2(10)).toBe(10);
+  });
+});
 
 describe("autoRoundOffRupee", () => {
   it("rounds to nearest rupee", () => {

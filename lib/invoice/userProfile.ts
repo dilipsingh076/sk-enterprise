@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { roundTo2 } from "@/lib/invoice/calculations";
+import { hasAtMost2Decimals, TWO_DECIMAL_MESSAGE } from "@/lib/invoice/formatDecimal";
 import { partySchema, sellerSchema } from "@/lib/invoice/schema";
 
 export const savedLineItemSchema = z.object({
@@ -6,7 +8,11 @@ export const savedLineItemSchema = z.object({
   description: z.string().min(1),
   hsn: z.string().min(4),
   unit: z.string().min(1),
-  rate: z.coerce.number().nonnegative(),
+  rate: z.coerce
+    .number()
+    .nonnegative()
+    .refine(hasAtMost2Decimals, TWO_DECIMAL_MESSAGE)
+    .transform(roundTo2),
   taxPercent: z.coerce.number().min(0).max(100).optional(),
 });
 

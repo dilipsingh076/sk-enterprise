@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { roundTo2 } from "@/lib/invoice/calculations";
+import { hasAtMost2Decimals, TWO_DECIMAL_MESSAGE } from "@/lib/invoice/formatDecimal";
 import {
   isValidInvoiceDate,
   normalizeInvoiceDateStorage,
@@ -118,6 +120,20 @@ export const sellerSchema = partySchema.extend({
 
 export const lineItemDiscountKindSchema = z.enum(["AMOUNT", "PERCENT"]);
 
+const twoDecimalPositive = (requiredMessage: string) =>
+  z.coerce
+    .number()
+    .positive(requiredMessage)
+    .refine(hasAtMost2Decimals, TWO_DECIMAL_MESSAGE)
+    .transform(roundTo2);
+
+const twoDecimalNonNegative = (requiredMessage: string) =>
+  z.coerce
+    .number()
+    .nonnegative(requiredMessage)
+    .refine(hasAtMost2Decimals, TWO_DECIMAL_MESSAGE)
+    .transform(roundTo2);
+
 const lineItemBaseSchema = z.object({
   description: z
     .string()
@@ -134,15 +150,15 @@ const lineItemBaseSchema = z.object({
         .max(12, "HSN/SAC too long")
         .regex(/^\d{4,12}$/, "HSN/SAC must be 4–12 digits"),
     ),
-  quantity: z.coerce.number().positive("Qty must be > 0"),
+  quantity: twoDecimalPositive("Qty must be > 0"),
   unit: z
     .string()
     .min(1, "Unit required")
     .transform(trimStr)
     .refine((s) => s.length > 0, "Unit required"),
-  rate: z.coerce.number().nonnegative("Rate must be ≥ 0"),
+  rate: twoDecimalNonNegative("Rate must be ≥ 0"),
   discountKind: lineItemDiscountKindSchema.default("AMOUNT"),
-  discount: z.coerce.number().nonnegative("Discount must be ≥ 0").default(0),
+  discount: twoDecimalNonNegative("Discount must be ≥ 0").default(0),
   /** GST % for this line (tax on qty × rate) — standard Indian slabs only. */
   taxPercent: z.preprocess(
     (val) => {
@@ -238,9 +254,32 @@ export const invoiceSchema = z
     lineItems: z.array(lineItemSchema).min(1, "Add at least one line"),
     taxMode: z.enum(["IGST", "CGST_SGST"]),
     gstPercent: z.coerce.number().min(0).max(100),
-    extraCharges: z.coerce.number().nonnegative().optional(),
+    extraCharges: z.preprocess(
+      (val) => (val === "" || val == null ? undefined : val),
+      z
+        .union([
+          z.undefined(),
+          z.coerce
+            .number()
+            .nonnegative()
+            .refine(hasAtMost2Decimals, TWO_DECIMAL_MESSAGE)
+            .transform(roundTo2),
+        ])
+        .optional(),
+    ),
     extraChargesLabel: z.string().optional(),
-    roundOff: z.coerce.number().optional(),
+    roundOff: z.preprocess(
+      (val) => (val === "" || val == null ? undefined : val),
+      z
+        .union([
+          z.undefined(),
+          z.coerce
+            .number()
+            .refine(hasAtMost2Decimals, TWO_DECIMAL_MESSAGE)
+            .transform(roundTo2),
+        ])
+        .optional(),
+    ),
     eInvoice: eInvoiceFormSchema,
   })
   .superRefine((data, ctx) => {

@@ -1,5 +1,6 @@
 import { normalizeLoadedInvoiceForm } from "@/components/invoice/defaultValues";
 import { prepareInvoicePayload } from "@/lib/invoice/billTaxDefaults";
+import { roundTo2 } from "@/lib/invoice/calculations";
 import { normalizeInvoiceDateStorage } from "@/lib/invoice/formatInvoiceDate";
 import { invoiceSchema, type InvoiceFormInput } from "@/lib/invoice/schema";
 import {
@@ -64,17 +65,19 @@ export function preprocessStoredInvoiceRaw(raw: unknown): unknown {
       const l = line as Record<string, unknown>;
       return {
         ...l,
+        quantity: roundTo2(Number(l.quantity) || 0),
+        rate: roundTo2(Number(l.rate) || 0),
         discountKind: l.discountKind === "PERCENT" ? "PERCENT" : "AMOUNT",
-        discount: l.discount ?? 0,
+        discount: roundTo2(Number(l.discount ?? 0)),
       };
     });
   }
 
   inv.reverseCharge = Boolean(inv.reverseCharge);
   inv.shipSameAsBill = inv.shipSameAsBill !== false;
-  inv.extraCharges = inv.extraCharges ?? 0;
+  inv.extraCharges = roundTo2(Number(inv.extraCharges ?? 0));
   inv.extraChargesLabel = inv.extraChargesLabel ?? "Other charges";
-  inv.roundOff = inv.roundOff ?? 0;
+  inv.roundOff = roundTo2(Number(inv.roundOff ?? 0));
 
   if (typeof inv.invoiceDate === "string") {
     inv.invoiceDate = normalizeInvoiceDateStorage(inv.invoiceDate);
