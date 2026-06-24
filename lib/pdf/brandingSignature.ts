@@ -25,14 +25,7 @@ function detectMime(buf: Buffer): "image/png" | "image/jpeg" | null {
   return null;
 }
 
-const SK_ENTERPRISES_GSTIN = "05ACSPC4640C1ZZ";
-
-/** SK Enterprises (UK) issuer — bundled proprietor signature applies only to this GSTIN. */
-export function usesBrandingSignature(gstin: string): boolean {
-  return gstin.trim().toUpperCase() === SK_ENTERPRISES_GSTIN;
-}
-
-/** Base64 data URI for the bundled SK Enterprises signature (server-side PDF only). */
+/** Base64 data URI for the bundled proprietor signature (server-side PDF only). */
 export function getBrandingSignatureDataUri(): string | null {
   if (cachedDataUri !== undefined) return cachedDataUri;
   try {

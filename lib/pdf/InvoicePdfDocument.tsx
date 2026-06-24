@@ -644,7 +644,7 @@ export function InvoicePdfDocument({
   amountWords: string;
   /** Bundled SK logo (base64 data URI), optional if file missing */
   logoSrc?: string | null;
-  /** Bundled SK Enterprises proprietor signature (UK issuer only). */
+  /** Bundled proprietor signature (base64 data URI), optional if file missing */
   signatureSrc?: string | null;
   /** Shown on inline PDF preview before final download. */
   showDraftWatermark?: boolean;
